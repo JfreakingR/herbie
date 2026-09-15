@@ -1,0 +1,46 @@
+# Downloaded toolchains and images - large, and re-downloadable.
+tools/arduino-cli/
+tools/arduino-data/
+tools/arduino-downloads/
+tools/scrcpy-win64-v4.1/
+tools/imager_latest.exe
+*.img
+*.img.xz
+
+# Decompiler output - thousands of files, all re-derivable from the .apk files
+# that ARE committed. The apks themselves are kept: they came off the robot and
+# the vendor is gone, so they cannot be downloaded again.
+software/factory-apks/ctl-decompile-full/
+software/factory-apks/ctl-decompile-wifi/
+software/factory-apks/ctl-analysis/*.dex
+tools/scrcpy-win64-v4.1.zip
+
+# Build output.
+firmware/build/
+__pycache__/
+*.pyc
+
+# Vendor driver bundle, re-downloadable.
+CP210x_Universal_Windows_Driver/
+CP210x_Universal_Windows_Driver.zip
+
+# Scratch, logs, and archives.
+.codex/
+.codex-remote-attachments/
+androguard.db
+androguard.log
+attachments.zip
+*.bak-*
+console/.frame.bin
+
+# Unrelated to Herbie.
+Skyrim_ENBSeries_Complete_Instruction_Manual.docx
+_qa_enb_manual*/
+build_enb_manual.py
+
+# SECRETS - never commit these.
+# Herbie's board password and device id live in the handoffs and were read off
+# the robot; keep any extracted copy local.
+secrets/
+*.token
+api-token

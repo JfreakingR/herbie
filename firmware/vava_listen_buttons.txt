@@ -1,0 +1,64 @@
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:1
+load:0x3fff0030,len:4876
+ho 0 tail 12 room 4
+load:0x40078000,len:16532
+load:0x40080400,len:3500
+entry 0x400805b4
+
+Passive VAVA UART listener
+No data is transmitted to the VAVA.
+Choose a baud rate, then power-cycle the VAVA:
+  1 = 115200 baud
+  2 = 57600 baud
+  3 = 38400 baud
+  4 = 19200 baud
+  5 = 9600 baud
+  6 = 4800 baud
+  7 = 2400 baud
+  m = show this menu
+
+Listening on GPIO23 at 115200 baud (8N1).
+Power-cycle the VAVA now, then watch for byte lines.
+     17092 ms | 00 AA 55 00 07 02 80 00 5A 00 00 20 00          | ..U.....Z.. .
+     39085 ms | 00 AA 55 00 07 02 81 00 5A 00 00 21 00          | ..U.....Z..!.
+     61079 ms | 00 AA 55 00 07 02 82 00 5A 00 00 22 00          | ..U.....Z..".
+     82074 ms | 00 AA 55 00 07 02 83 00 5A 00 00 23 00          | ..U.....Z..#.
+     94481 ms | 00 AA 55 00 05 25 84 01 00 5A 0D 0A 20 53 6F 66 | ..U..%...Z.. Sof
+     94482 ms | 74 77 61 72 65 5F 76 65 72 73 69 6F 6E 3A 09 53 | tware_version:.S
+     94495 ms | 47 5F 38 30 32 5F 4C 44 5F 4D 54 4B 5F 54 55 54 | G_802_LD_MTK_TUT
+     94496 ms | 4B 5F 56 31 2E 32 5F 54 45 53 54 09 09 32 30 31 | K_V1.2_TEST..201
+     94507 ms | 39 2D 30 35 2D 32 37 0D 0A 48 61 72 64 77 61 72 | 9-05-27..Hardwar
+     94508 ms | 65 5F 76 65 72 73 69 6F 6E 3A 09 53 47 5F 38 30 | e_version:.SG_80
+     94520 ms | 32 5F 4C 44 5F 56 31 2E 32 5F 43 54 4C 09 09 09 | 2_LD_V1.2_CTL...
+     94521 ms | 32 30 31 38 2D 31 32 2D 32 34 0D 0A 41 6E 64 72 | 2018-12-24..Andr
+     94532 ms | 6F 69 64 5F 48 61 72 64 77 61 72 65 5F 76 65 72 | oid_Hardware_ver
+     94544 ms | 73 69 6F 6E 3A 09 41 38 30 30 32 5F 4D 42 38 30 | sion:.A8002_MB80
+     94545 ms | 5F 44 33 5F 56 31 2E 30 09 32 30 31 38 2D 30 37 | _D3_V1.0.2018-07
+     94557 ms | 2D 30 34 0D 0A                                  | -04..
+     94990 ms | 00 AA 55 00 07 02 85 00 5A 00 00 25             | ..U.....Z..%
+     95478 ms | 00 AA 55 00 05 25 86 0B 01 53                   | ..U..%...S
+     97980 ms | 00 AA 55 00 07 02 87 00 5A 00 00 27             | ..U.....Z..'
+    100970 ms | 00 AA 55 00 07 02 88 00 5A 00 00 28             | ..U.....Z..(
+    103959 ms | 00 AA 55 00 07 02 89 00 5A 00 00 29             | ..U.....Z..)
+    106949 ms | 00 AA 55 00 07 02 8A 00 5A 00 00 2A             | ..U.....Z..*
+    107851 ms | 00 AA 55 00 05 25 8B 01 00 55 0D 0A 20 53 6F 66 | ..U..%...U.. Sof
+    107852 ms | 74 77 61 72 65 5F 76 65 72 73 69 6F 6E 3A 09 53 | tware_version:.S
+    107865 ms | 47 5F 38 30 32 5F 4C 44 5F 4D 54 4B 5F 54 55 54 | G_802_LD_MTK_TUT
+    107865 ms | 4B 5F 56 31 2E 32 5F 54 45 53 54 09 09 32 30 31 | K_V1.2_TEST..201
+    107877 ms | 39 2D 30 35 2D 32 37 0D 0A 48 61 72 64 77 61 72 | 9-05-27..Hardwar
+    107878 ms | 65 5F 76 65 72 73 69 6F 6E 3A 09 53 47 5F 38 30 | e_version:.SG_80
+    107890 ms | 32 5F 4C 44 5F 56 31 2E 32 5F 43 54 4C 09 09 09 | 2_LD_V1.2_CTL...
+    107890 ms | 32 30 31 38 2D 31 32 2D 32 34 0D 0A 41 6E 64 72 | 2018-12-24..Andr
+    107902 ms | 6F 69 64 5F 48 61 72 64 77 61 72 65 5F 76 65 72 | oid_Hardware_ver
+    107914 ms | 73 69 6F 6E 3A 09 41 38 30 30 32 5F 4D 42 38 30 | sion:.A8002_MB80
+    107915 ms | 5F 44 33 5F 56 31 2E 30 09 32 30 31 38 2D 30 37 | _D3_V1.0.2018-07
+    107927 ms | 2D 30 34 0D 0A                                  | -04..
+    109939 ms | 00 AA 55 00 07 02 8C 00 5A 00 00 2C             | ..U.....Z..,
+    112929 ms | 00 AA 55 00 07 02 8D 00 5A 00 00 2D             | ..U.....Z..-
+    115918 ms | 00 AA 55 00 07 02 8E 00 5A 00 00 2E             | ..U.....Z...
+    118908 ms | 00 AA 55 00 07 02 8F 00 5A 00 00 2F             | ..U.....Z../

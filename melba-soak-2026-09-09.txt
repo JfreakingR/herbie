@@ -1,0 +1,18 @@
+soak start 2026-09-09 00:05:09
+00:05:09  DOWN  (drop #1)
+00:05:48  UP    (was down for 2 samples / ~30s)
+00:08:34  DOWN  (drop #2)
+00:13:50  UP    (was down for 16 samples / ~240s)
+00:16:36  DOWN  (drop #3)
+00:21:32  UP    (was down for 15 samples / ~225s)
+00:24:33  DOWN  (drop #4)
+00:29:49  UP    (was down for 16 samples / ~240s)
+
+soak end 2026-09-09 00:30:19
+samples ok:   36
+samples fail: 49
+availability:  42%
+distinct drops: 4
+longest outage: ~240s
+
+[exited with code 0]
