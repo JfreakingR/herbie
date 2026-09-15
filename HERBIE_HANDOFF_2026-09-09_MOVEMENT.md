@@ -57,7 +57,7 @@ Galaxy (brain) ──Wi-Fi or USB-OTG──► VAVA Android board (rooted)
 
 - Board is **rooted** (`uid=0`, `su` context), ADB serial `0123456789ABCDEF`.
 - **Already on the household Wi-Fi at `192.168.1.122`** (SSID
-  `<WIFI_SSID>`, MAC `<HERBIE_WLAN_MAC>`) — the same subnet as Melba,
+  `MySpectrumWiFi20-2G_EXT`, MAC `10:72:0d:39:02:43`) — the same subnet as Melba,
   so the phone can reach it wirelessly with no cord.
 - `/dev/ttyMT1` is `crwxrwxrwx`, so no chmod is needed.
 - `/proc/tty/driver/mtk-uart` line `1:` is the live tx/rx byte counter for this

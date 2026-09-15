@@ -12,7 +12,7 @@ corrections section — two standing assumptions from that file are now wrong.**
 - **Herbie: powered by the 16.8 V adapter, no battery pack installed.**
 - **The ESP32 has been reflashed.** `firmware/vava_uart_listener` replaced
   `pal_ble_wifi`. It is on **COM7** (CP210x, `USB\VID_10C4&PID_EA60`,
-  ESP32-D0WD-V3, MAC `<ESP32_MAC>`). `pal_ble_wifi` source is still in the
+  ESP32-D0WD-V3, MAC `20:50:0d:07:a0:e4`). `pal_ble_wifi` source is still in the
   repo if it is ever needed again.
 - **J21 wiring was in progress and is not confirmed connected.** Intended:
   `J21 TX (red) -> ESP32 GPIO23`, `J21 GND (black) -> ESP32 GND`.
@@ -41,7 +41,7 @@ The 7-second up-window is a fixed firmware timeout: the preloader waits for a
 flash-tool handshake, gets none, attempts to boot Android, fails, resets.
 
 **Consequences:** no ADB over USB or Wi-Fi; he never joins Wi-Fi
-(`192.168.1.122` dead, MAC `<HERBIE_WLAN_MAC>` absent from a full
+(`192.168.1.122` dead, MAC `10:72:0d:39:02:43` absent from a full
 `192.168.1.0/24` sweep, repeated). Network sweeps are pointless until he boots.
 
 ### Ruled out

@@ -28,7 +28,7 @@ Date: 2026-09-08 (America/New_York), updated 2026-09-09
 - Galaxy ADB serial: `R5CR11QCHPY`, model `SM-G998U`, Android 15, authorized.
 - Herbie/VAVA ADB serial: `0123456789ABCDEF`, rooted factory Android 5.1.
 - ESP32: CP210x on `COM7`, `USB\\VID_10C4&PID_EA60`.
-- Melba direct Ethernet: IPv6 link-local `fe80::ba27:ebff:fe2e:a57e%17`, MAC `<MELBA_MAC>`.
+- Melba direct Ethernet: IPv6 link-local `fe80::ba27:ebff:fe2e:a57e%17`, MAC `b8:27:eb:2e:a5:7e`.
 - Melba SSH identity: `C:\Users\Phyllis\.ssh\pal_melba_agent_ed25519`; user `jfreakingr`; use `HostKeyAlias=Melba.local` with strict host-key checking when connecting by raw IPv6.
 
 ## Galaxy resources
@@ -482,14 +482,14 @@ board on the strength of it: the Pi holds hours of uptime with zero network erro
 profile now has `connection.autoconnect no`.
 
 Joined to the real 2.4 GHz network instead. **The correct SSID is
-`<WIFI_SSID>`** (channel 11, WPA2) - note this does *not* match
-`<WIFI_SSID_OLD_WRONG>` as recorded in `PAL_HANDOFF_2026-09-07_BLE_WIFI.md`, which
+`MySpectrumWiFi20-2G_EXT`** (channel 11, WPA2) - note this does *not* match
+`MySpectrumwifi20_2g` as recorded in `PAL_HANDOFF_2026-09-07_BLE_WIFI.md`, which
 should be corrected there. The password was entered interactively by the owner via
 `sudo nmcli --ask device wifi connect`, so it never entered a script, log, or
 handoff.
 
 ```
-wlan0  connected  <WIFI_SSID>  192.168.1.140/24
+wlan0  connected  MySpectrumWiFi20-2G_EXT  192.168.1.140/24
 eth0   connected                           169.254.18.48/16
 NTP synchronized: yes    Wed 2026-09-09 01:14 EDT   (was reporting 18 June)
 internet: 0% loss, 33 ms
@@ -730,11 +730,11 @@ Relevant classes: `board.MoveTask`, `board.SimpleMoveTask`, `board.CircleMoveTas
 ### Robot network identity
 
 Herbie's board is **already on the household Wi-Fi**: `192.168.1.122/24` on
-`wlan0`, MAC `<HERBIE_WLAN_MAC>`, SSID `<WIFI_SSID>` — the same
+`wlan0`, MAC `10:72:0d:39:02:43`, SSID `MySpectrumWiFi20-2G_EXT` — the same
 subnet as Melba (`192.168.1.140`). The Galaxy can therefore reach him over Wi-Fi
 with **no cord and no OTG at all**. The app's own screen shows `WIFI` green.
 
-Device UID `<HERBIE_DEVICE_UID>` matches the BLE advertised name recorded in
+Device UID `6E5VF9GRNL2E99B7111A` matches the BLE advertised name recorded in
 `PAL_HANDOFF_2026-09-07_BLE_WIFI.md`.
 
 Note: the board's `/sys/class/power_supply/ac/online` reads `0` even with the

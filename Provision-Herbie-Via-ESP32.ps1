@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$Port = 'COM7',
-    [string]$Ssid = '<WIFI_SSID>'
+    [string]$Ssid = 'MySpectrumWiFi20-2G_EXT'
 )
 
 $ErrorActionPreference = 'Stop'

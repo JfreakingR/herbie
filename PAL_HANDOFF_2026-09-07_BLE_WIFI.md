@@ -26,9 +26,9 @@ Always scan Pal **by that name**, never by MAC. BLE address is random/private. O
 
 | Address | When |
 |---|---|
-| `<LAN_MAC_1>` | Windows BLE connect / GATT dump |
-| `<LAN_MAC_3>` | Later Windows GATT dump (`last-gatt-dump.txt`) |
-| `<LAN_MAC_2>` | ESP32 FOUND / Just Works connect |
+| `48:20:27:48:5F:24` | Windows BLE connect / GATT dump |
+| `7C:0C:91:05:FC:BF` | Later Windows GATT dump (`last-gatt-dump.txt`) |
+| `4c:8e:1e:8c:99:a6` | ESP32 FOUND / Just Works connect |
 
 ## Current hardware / power (unchanged)
 
@@ -37,7 +37,7 @@ Always scan Pal **by that name**, never by MAC. BLE address is random/private. O
 - Battery pack **quarantined**. Adapter-only: original 16.8 V center-positive. Tracks **raised**.
 - `motor_authority=false`. Safe state `STOP`. No treat / laser / motor commands.
 - Do **not** reset Pal (8-second power hold is factory reset).
-- ESP32: ESP32-D0WD-V3, CP210x **COM7**, MAC `<ESP32_MAC>`. USB power only.
+- ESP32: ESP32-D0WD-V3, CP210x **COM7**, MAC `20:50:0d:07:a0:e4`. USB power only.
 - **J21 UART listen cable must stay unplugged** while `pal_ble_wifi` is on the ESP32. Do not attach VAVA `RX` or `3.3V`. Unplug J21 before any BLE flash.
 
 ## What was tried
@@ -85,7 +85,7 @@ PASS=your-password
 SEND
 ```
 
-`PASS` is not echoed. Password length was 12 characters; the SSID used was recorded as `<WIFI_SSID_OLD_WRONG>` (19 chars). **That SSID was wrong.** A scan from Melba on 2026-09-09 shows the actual broadcasting 2.4 GHz network is `<WIFI_SSID>` (channel 11, WPA2) - different capitalisation, hyphens rather than underscores, and an `_EXT` suffix. SSIDs are exact, so every BLE provisioning attempt above sent Pal a network name that does not exist. Retry with the correct SSID before concluding anything about the `2ABA` characteristic. **Never write the password into this repo.**
+`PASS` is not echoed. Password length was 12 characters; the SSID used was recorded as `MySpectrumwifi20_2g` (19 chars). **That SSID was wrong.** A scan from Melba on 2026-09-09 shows the actual broadcasting 2.4 GHz network is `MySpectrumWiFi20-2G_EXT` (channel 11, WPA2) - different capitalisation, hyphens rather than underscores, and an `_EXT` suffix. SSIDs are exact, so every BLE provisioning attempt above sent Pal a network name that does not exist. Retry with the correct SSID before concluding anything about the `2ABA` characteristic. **Never write the password into this repo.**
 
 **COM7 DTR rule:** `DtrEnable=true` (default SerialPort / some monitors) **resets the ESP32 and drops BLE**. Open COM7 with `DtrEnable=false` and `RtsEnable=false`. Keep the port open until `WRITE ... ok=` prints. An earlier session set SSID/PASS then printed `SEND_DONE` with **no WRITE lines** because the serial session ended too soon; credentials were still in ESP32 RAM.
 
@@ -126,7 +126,7 @@ Factory LED hint - **corrected 2026-09-09 from the VP-SPR001 manual** (`a5def2.p
 1. Pal accepted GATT writes but `2ABA` is not the Wi-Fi provision pipe (SIG HTTP Control Point opcodes vs vendor JSON).
 2. Pal needs notify/CCCD enabled, a different payload, or `secureConnection()` before it acts.
 3. Pal is still joining, or joined with no TUTK LAN service (vendor cloud/P2P may be dead).
-4. **SSID was wrong entirely - confirmed 2026-09-09.** The real network is `<WIFI_SSID>`, not `<WIFI_SSID_OLD_WRONG>`. This is now the leading explanation for writes being accepted (`ok=1` is only ATT-layer success) while Pal never joined: it was handed a nonexistent SSID. Retry with the correct name before pursuing hypotheses 1-3.
+4. **SSID was wrong entirely - confirmed 2026-09-09.** The real network is `MySpectrumWiFi20-2G_EXT`, not `MySpectrumwifi20_2g`. This is now the leading explanation for writes being accepted (`ok=1` is only ATT-layer success) while Pal never joined: it was handed a nonexistent SSID. Retry with the correct name before pursuing hypotheses 1-3.
 5. Five-minute provision window / Pal still saying waiting for network config.
 
 ## How to continue (PC / ESP32 only)

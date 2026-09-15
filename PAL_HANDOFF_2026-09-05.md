@@ -11,7 +11,7 @@ Use the Galaxy S21 Ultra as Pal's AI-facing phone brain and the Raspberry Pi 3B 
 Software gate for this phase is verified. Treat `vcgencmd get_throttled` as non-blocking per the user; do not stop work on that flag.
 
 - SSH with the automation key succeeded as `jfreakingr@Melba`. Hostname `Melba`. OS: Debian 13/Trixie, kernel `6.18.34+rpt-rpi-v8` aarch64.
-- Ethernet is IPv6 link-local only (`fe80::ba27:ebff:fe2e:a57e%17`, MAC `<MELBA_MAC>`). `wlan0` is down. Do not wait on `network-online.target`.
+- Ethernet is IPv6 link-local only (`fe80::ba27:ebff:fe2e:a57e%17`, MAC `b8:27:eb:2e:a5:7e`). `wlan0` is down. Do not wait on `network-online.target`.
 - `pal-pi-bridge` 0.1.0 is installed, enabled, and was active after an unattended reboot (`After=network.target`). Heartbeat over Ethernet SSH passed: ready, acknowledged, `motor_authority:false`, `safe_motion_state:STOP`.
 - Phone-to-Pi heartbeat passed from Termux over `adb reverse tcp:18767` plus an SSH local forward **without** `ssh -6`: `PHONE_TO_PI_ACK=True`, `MOTOR=False`, `SAFE=STOP`, `SERVICE=pal-pi-bridge`.
 - Phone brain remains verified over USB ADB: `pal-phone-brain 0.1.0`, ready, heartbeat acknowledged, `motor_authority:false`, `safe_motion_state:STOP`.

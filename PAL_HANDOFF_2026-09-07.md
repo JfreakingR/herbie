@@ -23,7 +23,7 @@ Phone/Pi software phase remains verified from 2026-09-05 (not re-tested today). 
   - Red pigtail on `TX`, black on `GND`.
 - **J22** four pins: `GND`, `CLK`, `DIO`, `3.3V`. `3.3V` matches J21 (~3.33 V). Treat as STM32 SWD. **Do not attach.**
 - **Main controller** photo: `SE6POET SG_802_LD_V1.2_CTL` `2018-12-24`. MCU is **STM32F103**. Printed rails include `3.3V` and `+12V`. Power button and buzzer are on this board. Do not probe chips or corner pads.
-- **ESP32** (ESP32-D0WD-V3, CP210x **COM7**, MAC `<ESP32_MAC>`) flashed with `firmware\vava_uart_listener`. Wiring: J21 `TX` → **GPIO23**, J21 `GND` → **GND**. USB only for ESP32 power.
+- **ESP32** (ESP32-D0WD-V3, CP210x **COM7**, MAC `20:50:0d:07:a0:e4`) flashed with `firmware\vava_uart_listener`. Wiring: J21 `TX` → **GPIO23**, J21 `GND` → **GND**. USB only for ESP32 power.
 - **Passive listen succeeded** at 115200 8N1:
   - Idle: `00 AA 55 00 07 02 NN 00 5A 00 00 <xor>`
   - Power button: `00 AA 55 00 05 25 …` then version text (`SG_802_LD_MTK_TUTK_V1.2_TEST`, `SG_802_LD_V1.2_CTL`).
