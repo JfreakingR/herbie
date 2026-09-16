@@ -16,12 +16,11 @@ USB ADB `0123456789ABCDEF`. Factory app running normally — every freeze this s
 was resumed and verified `S`. All pushed test files were deleted from `/sdcard`.
 Placed on the floor for the last test.
 
-**⚠ Herbie dropped off USB at 14:11:34, ~2.5 min after the last pulse**, while this
-handoff was being written (uptime was 8514 s, continuous all session). At 14:12:45:
-no ADB, no MT65xx preloader, **and the ESP32's CP2102 vanished at the same moment.**
-The ESP32 is USB-powered, so both disappearing together points to a USB cable/hub
-disconnect rather than the pack dying — but that is inference, not confirmed. Check
-cables first; if he is silent on USB with cables good, treat it as a power question.
+**End state: everything unplugged by the owner.** Herbie dropped off USB at
+14:11:34, with the ESP32's CP2102 vanishing at the same moment; **the owner confirmed
+they unplugged all cables.** This was not a power fault or brownout — uptime was a
+continuous 8514 s on battery through every motor pulse. Reconnect USB (and the ESP32)
+before the next bench session.
 
 **Wi-Fi is down on the board.** `wlan0` shows `NO-CARRIER`, `state DOWN`;
 `192.168.1.122` does not answer ping. USB is the only link right now.
