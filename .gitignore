@@ -44,3 +44,7 @@ build_enb_manual.py
 secrets/
 *.token
 api-token
+
+# Extracted dex and string dumps for the dex tools - re-derivable from the apks.
+ctl_dex/
+strings.txt
