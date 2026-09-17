@@ -15,6 +15,7 @@ BRAIN_DIR="$HOME/pal-phone-brain"
 BRAIN_LOG="$BRAIN_DIR/pal-phone-brain.log"
 SUPERVISOR_LOG="$BRAIN_DIR/herbie-supervisor.log"
 SUPERVISOR_PID="$BRAIN_DIR/herbie-supervisor.pid"
+NETWORK_MODE_FILE="$BRAIN_DIR/herbie-network-mode"
 
 MIN_BACKOFF=5
 MAX_BACKOFF=60
@@ -61,12 +62,26 @@ trap cleanup TERM INT
 cd "$BRAIN_DIR"
 log "supervisor started as PID $$"
 
+network_mode="device"
+if [ -f "$NETWORK_MODE_FILE" ]; then
+    network_mode="$(head -n 1 "$NETWORK_MODE_FILE" 2>/dev/null || true)"
+fi
+case "$network_mode" in
+    wifi) bind_host="0.0.0.0" ;;
+    device|usb|"") bind_host="127.0.0.1" ;;
+    *)
+        bind_host="127.0.0.1"
+        log "WARNING: invalid network mode '$network_mode'; using device-only"
+        ;;
+esac
+log "network mode=$network_mode bind=$bind_host"
+
 backoff="$MIN_BACKOFF"
 while true; do
     started_at="$(date +%s)"
     log "starting phone brain"
 
-    HERBIE_PHONE_HOST=127.0.0.1 HERBIE_PHONE_PORT=8765 \
+    HERBIE_PHONE_HOST="$bind_host" HERBIE_PHONE_PORT=8765 \
         python "$BRAIN_DIR/pal_phone_brain.py" >>"$BRAIN_LOG" 2>&1
     exit_code=$?
 

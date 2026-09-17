@@ -1,0 +1,8 @@
+diff --git a/common/chat.cpp b/common/chat.cpp
+--- a/common/chat.cpp
++++ b/common/chat.cpp
+@@
+     common_chat_templates_inputs inputs;
+     inputs.use_jinja = use_jinja;
++    inputs.enable_thinking = false;
+     inputs.add_bos   = tmpls->add_bos;

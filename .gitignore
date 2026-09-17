@@ -1,4 +1,7 @@
 # Downloaded toolchains and images - large, and re-downloadable.
+.tools/
+.android/
+android_bonsai_reference/
 tools/arduino-cli/
 tools/arduino-data/
 tools/arduino-downloads/

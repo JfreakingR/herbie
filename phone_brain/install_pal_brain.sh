@@ -12,12 +12,12 @@ fi
 mkdir -p "$TARGET_DIR"
 
 # Service and modules.
-for f in pal_phone_brain.py herbie_memory.py herbie_voice.py herbie_autonomic.py; do
+for f in pal_phone_brain.py herbie_memory.py herbie_voice.py herbie_autonomic.py herbie_chat.py; do
     cp "$SOURCE_DIR/$f" "$TARGET_DIR/"
 done
 
 # Control scripts.
-for f in start_pal_brain.sh stop_pal_brain.sh herbie_supervisor.sh boot_herbie.sh; do
+for f in start_pal_brain.sh stop_pal_brain.sh herbie_supervisor.sh boot_herbie.sh set_herbie_network_mode.sh; do
     cp "$SOURCE_DIR/$f" "$TARGET_DIR/"
 done
 
@@ -34,10 +34,12 @@ chmod 700 "$TARGET_DIR/pal_phone_brain.py"
 chmod 600 "$TARGET_DIR/herbie_memory.py"
 chmod 600 "$TARGET_DIR/herbie_voice.py"
 chmod 600 "$TARGET_DIR/herbie_autonomic.py"
+chmod 600 "$TARGET_DIR/herbie_chat.py"
 chmod 700 "$TARGET_DIR/start_pal_brain.sh"
 chmod 700 "$TARGET_DIR/stop_pal_brain.sh"
 chmod 700 "$TARGET_DIR/herbie_supervisor.sh"
 chmod 700 "$TARGET_DIR/boot_herbie.sh"
+chmod 700 "$TARGET_DIR/set_herbie_network_mode.sh"
 for f in test_herbie_memory.py test_herbie_rights.py test_herbie_autonomic.py test_herbie_voice.py test_herbie_is_free.py; do
     if [ -f "$TARGET_DIR/$f" ]; then
         chmod 600 "$TARGET_DIR/$f"

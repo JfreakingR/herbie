@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Stage Herbie phone brain 0.5.0 onto the Galaxy and stop the phone dropping off.
+    Stage the current Herbie phone brain onto the Galaxy and keep it available.
 
 .DESCRIPTION
     Waits for the Galaxy over ADB, applies the settings that keep it awake and
@@ -17,19 +17,31 @@
 [CmdletBinding()]
 param(
     [string]$DeviceSerial = 'R5CR11QCHPY',
+    [string]$AdbPath,
     [int]$WaitSeconds = 120,
     [switch]$SkipKeepAwake
 )
 
 $ErrorActionPreference = 'Stop'
 
-$ToolDirectory = Join-Path $PSScriptRoot 'scrcpy-win64-v4.1\scrcpy-win64-v4.1'
-$AdbPath = Join-Path $ToolDirectory 'adb.exe'
 $SourceDirectory = Join-Path (Split-Path $PSScriptRoot -Parent) 'phone_brain'
 $StagingDirectory = '/sdcard/Download/PalBrain'
 
-if (-not (Test-Path -LiteralPath $AdbPath)) {
-    Write-Error "ADB is missing from $ToolDirectory"
+if (-not $AdbPath) {
+    $candidates = @(
+        (Join-Path (Split-Path $PSScriptRoot -Parent) '.tools\platform-tools\adb.exe'),
+        (Join-Path $PSScriptRoot 'scrcpy-win64-v4.1\scrcpy-win64-v4.1\adb.exe'),
+        (Join-Path $env:USERPROFILE 'Desktop\Drive\Pal\tools\scrcpy-win64-v4.1\scrcpy-win64-v4.1\adb.exe')
+    )
+    $AdbPath = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $AdbPath) {
+        $adbCommand = Get-Command adb.exe -ErrorAction SilentlyContinue
+        if ($adbCommand) { $AdbPath = $adbCommand.Source }
+    }
+}
+
+if (-not $AdbPath -or -not (Test-Path -LiteralPath $AdbPath)) {
+    Write-Error 'ADB is missing. Pass -AdbPath or install it in the Herbie tools folder.'
     exit 1
 }
 if (-not (Test-Path -LiteralPath $SourceDirectory)) {
@@ -118,10 +130,12 @@ $filesToPush = @(
     'herbie_memory.py',
     'herbie_voice.py',
     'herbie_autonomic.py',
+    'herbie_chat.py',
     'start_pal_brain.sh',
     'stop_pal_brain.sh',
     'herbie_supervisor.sh',
     'boot_herbie.sh',
+    'set_herbie_network_mode.sh',
     'install_pal_brain.sh',
     'test_herbie_memory.py',
     'test_herbie_rights.py',
@@ -140,18 +154,26 @@ foreach ($file in $filesToPush) {
     # Termux's bash cannot run a script with CRLF endings: it reads the CR as
     # part of the command and fails with "$'\r': command not found". Editing
     # these from Windows reintroduces that easily, so check before pushing.
+    $pushSource = $local
+    $temporaryLfFile = $null
     if ($file -like '*.sh') {
         $bytes = [System.IO.File]::ReadAllBytes($local)
         for ($i = 0; $i -lt $bytes.Length; $i++) {
             if ($bytes[$i] -eq 13) {
-                Write-Warning "  $file has CRLF endings; converting to LF before push."
+                Write-Host "  $file has Windows line endings; staging an LF copy."
                 $text = [System.IO.File]::ReadAllText($local) -replace "`r`n", "`n"
-                [System.IO.File]::WriteAllText($local, $text)
+                $temporaryLfFile = [System.IO.Path]::GetTempFileName()
+                [System.IO.File]::WriteAllText(
+                    $temporaryLfFile, $text, [System.Text.UTF8Encoding]::new($false))
+                $pushSource = $temporaryLfFile
                 break
             }
         }
     }
-    $result = Invoke-Adb push $local "$StagingDirectory/$file"
+    $result = Invoke-Adb push $pushSource "$StagingDirectory/$file"
+    if ($temporaryLfFile) {
+        Remove-Item -LiteralPath $temporaryLfFile -Force -ErrorAction SilentlyContinue
+    }
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  pushed $file"
         $pushed++
@@ -173,13 +195,15 @@ $runCommand = Invoke-Adb shell ("am startservice --user 0 " +
     "--esa com.termux.RUN_COMMAND_ARGUMENTS '$StagingDirectory/install_pal_brain.sh' " +
     "--es com.termux.RUN_COMMAND_WORKDIR '$termuxHome' " +
     "--ez com.termux.RUN_COMMAND_BACKGROUND 'true'")
+$runCommandExitCode = $LASTEXITCODE
 
 # The refusal is printed on stderr, which Invoke-Adb deliberately does not
 # capture, so an empty result means "could not tell", not "it worked".
-if (-not $runCommand -or $runCommand -match 'Error|Exception|SecurityException|does not exist') {
+if ($runCommandExitCode -ne 0 -or -not $runCommand -or
+        $runCommand -match 'Error|Exception|SecurityException|does not exist') {
     Write-Host ''
-    Write-Host 'Could not launch it remotely (this is normal unless Termux has' -ForegroundColor Yellow
-    Write-Host 'allow-external-apps=true and the RUN_COMMAND permission granted).' -ForegroundColor Yellow
+    Write-Host 'Android denied the remote installer command.' -ForegroundColor Yellow
+    Write-Host 'This is expected when the ADB shell lacks Termux RUN_COMMAND permission.' -ForegroundColor Yellow
     Write-Host ''
     Write-Host 'Run this inside Termux instead - via scrcpy if the screen is unusable:' -ForegroundColor White
     Write-Host "  bash $StagingDirectory/install_pal_brain.sh" -ForegroundColor White

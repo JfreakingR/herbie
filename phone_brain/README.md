@@ -2,7 +2,7 @@
 
 This is Herbie's safety-bounded core service on the Galaxy S21 Ultra. It uses only Python's standard library and listens on the phone's loopback interface. Windows or a future local bridge reaches it through an authenticated ADB forward.
 
-Version 0.7 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), and a mood-driven local voice. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
+Version 0.11 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router. It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
 
 ## Authentication
 
@@ -26,6 +26,7 @@ Read:
 
 - `GET /health` — readiness and safety state. Full detail only when authenticated.
 - `GET /v1/self` — identity, personality, drives, core principles, memory count.
+- `GET /v1/coordination` — active brain, computer lease age, phone fallback readiness, and the single memory writer.
 - `GET /v1/expression` — face state, emotional dimensions, attention, listening, speaking.
 - `GET /v1/privacy` — privacy mode and sense permissions.
 - `GET /v1/memories` — memories; optional `q`, `limit`, and `order` (`recent` or `relevance`).
@@ -36,7 +37,8 @@ Read:
 
 Write:
 
-- `POST /v1/heartbeat` — e.g. `{"source":"pi-3b"}`.
+- `POST /v1/heartbeat` — ordinary observer heartbeat, or a bounded `computer-primary` lease. When that lease expires, `active_brain` automatically returns to `phone-local`.
+- `POST /v1/chat` — ask Herbie for one bounded reply. Uses the authenticated PC model while its lease is healthy, then automatically tries the phone-local model bridge.
 - `POST /v1/remember` — store an experience or fact.
 - `POST /v1/experience` — store an experience and apply bounded, audited trait changes.
 - `POST /v1/expression` — update the validated face/activity state.
@@ -63,6 +65,36 @@ Search uses SQLite FTS5 with the porter stemmer, so "independence" matches "inde
 `herbie_supervisor.sh` is the normal way to run the service. It holds a `termux-wake-lock`, restarts the brain if Android's battery optimiser kills it, and backs off gently on a crash loop while still recovering promptly from a one-off kill. `install_pal_brain.sh` also installs `~/.termux/boot/boot_herbie.sh`, which starts the supervisor after a phone reboot — this requires the **Termux:Boot** addon and is inert without it.
 
 `start_pal_brain.sh` remains for one-off unsupervised runs and refuses to start if the supervisor already owns the port.
+
+## Local Wi-Fi mode
+
+Herbie defaults to `device` mode and listens only on `127.0.0.1`. After the API
+token has been exported and backed up, Wi-Fi mode can be enabled inside Termux:
+
+```sh
+~/pal-phone-brain/set_herbie_network_mode.sh wifi
+```
+
+This restarts the supervisor and listens on port 8765 across the phone's active
+Wi-Fi connection. Every non-health endpoint still requires the bearer token,
+and requests whose actual source address is not loopback, link-local, or a
+private network are rejected. Use `device` instead of `wifi` to close the LAN
+listener again. This is intended for trusted home Wi-Fi and the phone's private
+hotspot, not internet port forwarding.
+
+## Backing up the live memory
+
+Before a phone deployment, reboot test, or physical transplant, run:
+
+```powershell
+powershell -File tools\Backup-Herbie-Phone.ps1
+```
+
+It performs an authenticated, read-only `/v1/export`, verifies that motor
+authority is still disabled, and stores a timestamped JSON backup under the
+current Windows user's private `.herbie\backups` directory. The API token is
+not included in the backup. The script also prints a SHA-256 checksum so a
+copied backup can be checked for damage.
 
 ## Autonomic layer
 
@@ -98,7 +130,9 @@ dependency, that suite fails.
 
 The service cannot command motors or actuators. Every response explicitly reports `motor_authority: false` and `safe_motion_state: STOP`. Motor authority belongs only in the future ESP32 layer with its independent watchdog and physical cutoff.
 
-Planned free local layers are wake-word detection, speech recognition, speech synthesis, camera perception, consenting-person recognition, an animated expression state, reflection, and a small on-device language model. Unknown people remain anonymous until they knowingly enroll.
+The free local phone language layer is now live through the separate `com.prismml.herbiebrain` Android app. Its foreground service loads `Qwen3-1.7B-Q4_K_M.gguf`, exposes an authenticated bridge only on `127.0.0.1:8766`, suppresses visible reasoning through llama.cpp's native chat-template control, and restarts after phone boot. Warm measured replies were 1.8–2.3 seconds in a two-turn continuity test. The older Bonsai 27B model remains installed for deliberate deep tests but is not the conversational default because an eight-token reply took 22 seconds.
+
+Remaining free local layers are wake-word detection, speech recognition, camera perception, consenting-person recognition, and a visible animated face. Android TTS, autobiographical reflection, and the language model are already local. Unknown people remain anonymous until they knowingly enroll.
 
 ## Tests
 

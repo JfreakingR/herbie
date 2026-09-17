@@ -81,6 +81,7 @@ class CostTests(unittest.TestCase):
             HERE / "herbie_memory.py",
             HERE / "herbie_voice.py",
             HERE / "herbie_autonomic.py",
+            HERE / "herbie_chat.py",
         ]
         local = {path.stem for path in source_files()}
         stdlib = set(getattr(__import__("sys"), "stdlib_module_names", ()))
@@ -133,18 +134,36 @@ class CostTests(unittest.TestCase):
                         f"{path.name} calls unexpected tool {token}",
                     )
 
-    def test_no_outbound_network_calls_in_runtime_code(self):
-        """Herbie's brain talks to loopback only; nothing phones home."""
+    def test_only_the_local_chat_router_makes_client_requests(self):
+        """Only the IP-literal LAN router may open a client connection."""
         for path in source_files():
             if path.name.startswith("test_"):
                 continue
             source = path.read_text(encoding="utf-8")
             for marker in ("urllib.request.urlopen", "http.client", "socket.create_connection"):
+                if path.name == "herbie_chat.py" and marker == "urllib.request.urlopen":
+                    continue
                 self.assertNotIn(
                     marker,
                     source,
-                    f"{path.name} makes outbound calls; the brain should stay local",
+                    f"{path.name} makes an unexpected client call",
                 )
+
+    def test_chat_router_rejects_public_networks_and_dns_names(self):
+        import herbie_chat
+
+        self.assertEqual(
+            herbie_chat.validate_local_url("http://192.168.1.10:18766"),
+            "http://192.168.1.10:18766",
+        )
+        for value in (
+            "https://192.168.1.10:18766",
+            "http://8.8.8.8:18766",
+            "http://example.com:18766",
+            "http://192.168.1.10:18766/path",
+        ):
+            with self.assertRaises(ValueError):
+                herbie_chat.validate_local_url(value)
 
 
 if __name__ == "__main__":

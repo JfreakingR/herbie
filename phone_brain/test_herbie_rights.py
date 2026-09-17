@@ -303,6 +303,51 @@ class ApiTokenTests(unittest.TestCase):
         full = json.loads(self._get("/health", token="test-token-value").read())
         self.assertIn("memory_count", full)
 
+    def test_network_source_boundary(self):
+        self.assertTrue(self.brain.is_local_network_address("127.0.0.1"))
+        self.assertTrue(self.brain.is_local_network_address("192.168.1.20"))
+        self.assertTrue(self.brain.is_local_network_address("10.0.0.2"))
+        self.assertTrue(self.brain.is_local_network_address("fe80::1234"))
+        self.assertFalse(self.brain.is_local_network_address("8.8.8.8"))
+        self.assertFalse(self.brain.is_local_network_address("not-an-address"))
+
+    def test_computer_primary_lease_and_phone_fallback(self):
+        result = json.loads(
+            self._post(
+                "/v1/heartbeat",
+                {
+                    "source": "windows-computer",
+                    "role": "computer-primary",
+                    "lease_seconds": 15,
+                },
+                token="test-token-value",
+            ).read()
+        )
+        self.assertEqual(result["coordination"]["active_brain"], "windows-computer")
+        self.assertTrue(result["coordination"]["computer_primary_available"])
+        self.assertEqual(result["coordination"]["memory_writer"], "phone")
+        self.assertFalse(result["coordination"]["motor_authority"])
+
+        with self.brain.STATE_LOCK:
+            last_seen = self.brain.STATE["primary_last_seen_monotonic"]
+            lease = self.brain.STATE["primary_lease_seconds"]
+        fallback = self.brain.coordination_snapshot(last_seen + lease + 0.1)
+        self.assertEqual(fallback["active_brain"], "phone-local")
+        self.assertTrue(fallback["phone_fallback_ready"])
+
+    def test_primary_lease_is_bounded(self):
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self._post(
+                "/v1/heartbeat",
+                {
+                    "source": "windows-computer",
+                    "role": "computer-primary",
+                    "lease_seconds": 600,
+                },
+                token="test-token-value",
+            )
+        self.assertEqual(caught.exception.code, 400)
+
     def test_memory_rights_round_trip_over_http(self):
         token = "test-token-value"
         mid = json.loads(
