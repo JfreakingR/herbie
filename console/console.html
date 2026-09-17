@@ -129,12 +129,16 @@
       <button data-dir="backward">↓</button>
       <button class="sp"></button>
     </div>
+    <div style="margin-top:9px; display:flex; gap:8px;">
+      <button data-dir="head_rise">Head up</button>
+      <button data-dir="head_bow">Head down</button>
+    </div>
     <div style="margin-top:11px;" class="row">
       <span>How long</span>
       <span><input type="range" id="dur" min="200" max="2000" step="100" value="1000"> <b id="durlabel">1.0s</b></span>
     </div>
     <div class="msg" id="movemsg"></div>
-    <p class="note">He accepts these, but won't actually drive until his battery is fitted — the adapter can't turn the wheels under load. Capped at 2 seconds.</p>
+    <p class="note">Sends the real wheel and head commands from his factory self-test. He acknowledges wheel commands but they haven't yet been seen to turn the wheels — watch the feed below for "acknowledged … OK". Wheels capped at 2 seconds.</p>
   </section>
 
   <section style="grid-column: 1 / -1;">
@@ -245,7 +249,7 @@ $('rememberbtn').onclick = () => {
   if (t) post('/api/remember', { text: t }, $('saymsg'));
 };
 $('dur').oninput = e => $('durlabel').textContent = (e.target.value / 1000).toFixed(1) + 's';
-document.querySelectorAll('.pad button[data-dir]').forEach(b => {
+document.querySelectorAll('button[data-dir]').forEach(b => {
   b.onclick = () => post('/api/move',
     { direction: b.dataset.dir, duration_ms: +$('dur').value }, $('movemsg'));
 });

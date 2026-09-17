@@ -110,40 +110,100 @@ class RoundTripTests(unittest.TestCase):
         self.assertEqual(parsed["payload"], b"\x01\x02\x03")
 
 
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def fixture(*parts):
+    with open(os.path.join(FIXTURES, *parts), "rb") as fh:
+        return fh.read()
+
+
 class MovementTests(unittest.TestCase):
-    def test_every_direction_builds_a_valid_frame(self):
+    """Movement is CONTROL_SERVO (0x22), from the factory SelfCheckTask."""
+
+    def test_every_direction_is_a_servo_1_frame(self):
         for i, direction in enumerate(["forward", "backward", "left", "right"]):
             with self.subTest(direction=direction):
-                frame = vava.move(direction, 1000, i)
-                parsed = vava.parse_frame(frame)
+                parsed = vava.parse_frame(vava.move(direction, 1000, i))
                 self.assertTrue(parsed["crc_ok"])
-                self.assertEqual(parsed["command"], vava.CMD_SERIAL_COMMAND_LINE)
-                self.assertIn(b"control_pantilt", parsed["payload"])
+                self.assertEqual(parsed["command"], vava.CMD_CONTROL_SERVO)
+                self.assertEqual(parsed["payload"][0], vava.SERVO_DRIVE)
 
-    def test_directions_match_the_factory_app_encoding(self):
-        """From SimpleMoveTask.doAction(): forward=4, back=3, left=2, right=1."""
-        expected = {"forward": b",1,4,", "backward": b",1,3,",
-                    "left": b",1,2,", "right": b",1,1,"}
-        for direction, marker in expected.items():
+    def test_directions_match_the_factory_self_test(self):
+        expected = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+        for direction, action in expected.items():
             payload = vava.parse_frame(vava.move(direction, 1000, 1))["payload"]
-            self.assertIn(marker, payload, direction)
+            self.assertEqual(payload[1], action, direction)
+
+    def test_duration_is_little_endian(self):
+        # 2000 ms = 0x07D0 -> D0 07. Swapping it would ask for 53,255 ms.
+        payload = vava.parse_frame(vava.move("forward", 2000, 1))["payload"]
+        self.assertEqual(payload[2:4], b"\xD0\x07")
 
     def test_duration_is_capped_at_the_boundary(self):
         payload = vava.parse_frame(vava.move("forward", 999999, 1))["payload"]
-        self.assertIn(str(vava.MAX_DURATION_MS).encode(), payload)
-        self.assertNotIn(b"999999", payload)
+        self.assertEqual(int.from_bytes(payload[2:4], "little"), vava.MAX_DURATION_MS)
 
     def test_invalid_input_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "invalid_direction"):
             vava.move("sideways", 500, 1)
-        for bad in (0, -100, "500", None):
+        for bad in (0, -100, "500", None, True):
             with self.assertRaisesRegex(ValueError, "invalid_duration"):
                 vava.move("forward", bad, 1)
+        with self.assertRaisesRegex(ValueError, "invalid_head_motion"):
+            vava.head("spin", 500, 1)
 
-    def test_head_movements_use_the_servo_command(self):
-        for direction in ("head_rise", "head_bow"):
-            payload = vava.parse_frame(vava.move(direction, 1000, 1))["payload"]
-            self.assertIn(b"control_servo", payload)
+    def test_head_is_servo_2(self):
+        for motion, action in (("rise", 1), ("bow", 2)):
+            payload = vava.parse_frame(vava.head(motion, 1000, 1))["payload"]
+            self.assertEqual((payload[0], payload[1]), (vava.SERVO_HEAD, action))
+
+    def test_pantilt_is_not_movement(self):
+        """0x23 is the laser pen / cat whip. move() must never build it."""
+        for direction in vava.DRIVE_ACTIONS:
+            self.assertNotEqual(vava.parse_frame(vava.move(direction, 500, 1))["command"],
+                                vava.CMD_CONTROL_PANTILT)
+
+
+class BenchCaptures20260916(unittest.TestCase):
+    """Frames sent to the real STM32 on 2026-09-16, and what it answered."""
+
+    SENT = {
+        "1_sent_wheels_fwd_500_seq02.bin": ("move", "forward", 500, 0x02),
+        "2a_sent_head_rise_1000_seq02.bin": ("head", "rise", 1000, 0x02),
+        "2b_sent_wheels_fwd_2000_seq03.bin": ("move", "forward", 2000, 0x03),
+        "3_sent_wheels_back_2000_seq04.bin": ("move", "backward", 2000, 0x04),
+        "4_sent_wheels_fwd_1000_seq05.bin": ("move", "forward", 1000, 0x05),
+    }
+
+    def test_builders_reproduce_every_sent_frame_byte_for_byte(self):
+        for name, (kind, motion, ms, seq) in self.SENT.items():
+            with self.subTest(name=name):
+                build = vava.move if kind == "move" else vava.head
+                self.assertEqual(vava.to_wire(build(motion, ms, seq)),
+                                 fixture("servo_20260916", name))
+
+    def test_every_reply_is_an_ok_ack_echoing_our_sequence(self):
+        replies = {
+            "1_reply_ack_plus_key11.bin": [0x02],
+            "2_reply_two_acks.bin": [0x02, 0x03],
+            "3_reply_ack_plus_key11.bin": [0x04],
+            "4_reply_ack.bin": [0x05],
+        }
+        for name, expected_seqs in replies.items():
+            with self.subTest(name=name):
+                acks = [vava.parse_general_response(f)
+                        for f in vava.iter_frames(fixture("servo_20260916", name))]
+                acks = [a for a in acks if a]
+                self.assertEqual([a["src_sequence"] for a in acks], expected_seqs)
+                for ack in acks:
+                    self.assertEqual(ack["src_command"], vava.CMD_CONTROL_SERVO)
+                    self.assertEqual(ack["result"], 0)
+
+    def test_general_response_ignores_other_frames(self):
+        heartbeat = vava.parse_frame(raw(HEARTBEATS[0]))
+        self.assertIsNone(vava.parse_general_response(heartbeat))
+        self.assertIsNone(vava.parse_general_response(None))
 
 
 class SafetyTests(unittest.TestCase):
@@ -180,10 +240,14 @@ class SafetyTests(unittest.TestCase):
     def test_duration_cap_is_enforced_in_the_builder(self):
         """The cap must live here, not in whatever calls it."""
         self.assertLessEqual(vava.MAX_DURATION_MS, 2000)
-        for direction in vava.MOVE_COMMANDS:
+        for direction in vava.DRIVE_ACTIONS:
             payload = vava.parse_frame(vava.move(direction, 10 ** 6, 1))["payload"]
-            number = int(payload.rstrip(b"\x00").split(b",")[-1])
-            self.assertLessEqual(number, vava.MAX_DURATION_MS)
+            self.assertLessEqual(int.from_bytes(payload[2:4], "little"),
+                                 vava.MAX_DURATION_MS)
+        for motion in vava.HEAD_ACTIONS:
+            payload = vava.parse_frame(vava.head(motion, 10 ** 6, 1))["payload"]
+            self.assertLessEqual(int.from_bytes(payload[2:4], "little"),
+                                 vava.MAX_HEAD_MS)
 
 
 
@@ -209,10 +273,12 @@ class CapturedExchange20260914(unittest.TestCase):
         reply = [f for f in vava.iter_frames(self.reply) if f["command"] == 0xA6][0]
         self.assertEqual(len(reply["raw"]), 33)
 
-    def test_sequence_is_the_boards_counter_and_is_not_echoed(self):
+    def test_header_sequence_is_the_boards_but_payload_echoes_ours(self):
         frames = list(vava.iter_frames(self.reply))
         self.assertEqual(frames[-2]["sequence"], 0x96)
-        self.assertEqual(frames[-1]["sequence"], 0x97)   # continues, not our 0x01
+        self.assertEqual(frames[-1]["sequence"], 0x97)   # board's counter continues
+        # ...while the reply payload opens with OUR seq 01 and OUR command 0x26.
+        self.assertEqual(frames[-1]["payload"][:2], b"\x01\x26")
 
     def test_board_frames_carry_no_leading_pad(self):
         self.assertTrue(self.reply.startswith(vava.FRAME_HEADER))
@@ -241,17 +307,12 @@ class ResponseCodes(unittest.TestCase):
             vava.response_code(0xA6)
 
 
-class ToyLogin(unittest.TestCase):
+class NoNetworkPacketBuilders(unittest.TestCase):
 
-    def test_login_frame_parses_back(self):
-        frame = vava.toy_login("", 0)
-        parsed = vava.parse_frame(frame)
-        self.assertEqual(parsed["command"], vava.CMD_TOY_LOGIN)
-        self.assertTrue(parsed["crc_ok"])
-
-    def test_password_is_nul_terminated_in_the_payload(self):
-        self.assertEqual(vava.parse_frame(vava.toy_login("abc", 0))["payload"],
-                         b"abc\x00")
+    def test_cloud_only_packets_have_no_serial_builders(self):
+        """TOY_LOGIN / COMMAND_LINE belong to the dead cloud's network framing."""
+        self.assertFalse(hasattr(vava, "toy_login"))
+        self.assertFalse(hasattr(vava, "command_line"))
 
 
 class KeyEventActions(unittest.TestCase):

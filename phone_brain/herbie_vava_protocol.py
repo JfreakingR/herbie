@@ -151,18 +151,30 @@ KEY_ACTION_LONG_NOTIFY = 4
 KEY_ACTION_NAMES = {0: "click", 1: "short_hold", 2: "long_hold",
                     3: "short_notify", 4: "long_notify"}
 
-# Movement, verbatim from SimpleMoveTask.doAction(). The direction lives in the
-# fifth field; duration is milliseconds.
-MOVE_COMMANDS = {
-    "forward": "control_pantilt,0,0,1,4,{ms}",
-    "backward": "control_pantilt,0,0,1,3,{ms}",
-    "left": "control_pantilt,0,0,1,2,{ms}",
-    "right": "control_pantilt,0,0,1,1,{ms}",
-    "head_rise": "control_servo,0,0,2,1,{ms}",
-    "head_bow": "control_servo,0,0,2,2,{ms}",
-}
+# Movement is CONTROL_SERVO (0x22): {byte number, byte action, short value}.
+# Ground truth is the factory self-test, test.SelfCheckTask:
+#   "Test move": control_servo,0,0,1,{1,2,4,3},2000
+#   "Test head": control_servo,0,0,2,{2,1},7000
+# Servo 1 drives the wheels, servo 2 moves the head. Terminal.transferToSerialStr
+# writes `value` WITHOUT LBE.swap16, so on the wire it is little-endian.
+#
+# Two things that looked like movement and are not:
+#   * CONTROL_PANTILT (0x23) is the laser pen (number 1) and cat whip (number 2);
+#     Terminal.onControlPantilt clamps them to 0-200 as laser X/Y.
+#   * The text strings in SimpleMoveTask.doAction ("control_pantilt,0,0,1,4,1000")
+#     have 6 tokens where the 0x23 branch demands 7, so the factory app itself
+#     throws and sends nothing. They are dead code, not a recipe.
+SERVO_DRIVE = 1
+SERVO_HEAD = 2
+DRIVE_ACTIONS = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+HEAD_ACTIONS = {"rise": 1, "bow": 2}
+PANTILT_LASER_PEN = 1
+PANTILT_CAT_WHIP = 2
 
+# The drive cap is deliberately short: this is the last point before bytes reach
+# a motor board. The head cap matches the factory self-test's 7000 ms.
 MAX_DURATION_MS = 2000
+MAX_HEAD_MS = 7000
 
 
 def checksum(data: bytes) -> int:
@@ -202,18 +214,78 @@ def to_wire(frame: bytes) -> bytes:
     return WIRE_PAD + frame
 
 
-def toy_login(password: str = "", sequence: int = 0) -> bytes:
-    """A cmd_toy_login (0x12) frame.
+# No toy_login() or command_line() builders, on purpose. TOY_LOGIN, COMMAND_LINE
+# and GENERAL_CONTROL all extend the full network HEADER (8-byte device_no) and
+# are parsed by TermSegoNetProtocolAdaptor: they belong to the dead VAVA cloud,
+# not to the serial link. Serial text uses SERIAL_COMMAND_LINE = {byte size;
+# byte[] text}, which nothing here needs now that movement is CONTROL_SERVO.
 
-    TOY_LOGIN is `{STRING password; TAIL crc}` and STRING is a bare `byte[]`
-    with no length prefix, so the payload is just the NUL-terminated password.
-    Field order came from TermSegoPacket$TOY_LOGIN.getFieldOrder().
 
-    The password itself is NOT known. No default was found in the dex, so the
-    empty string is a starting guess, not a recovered value. The board answers
-    with CMD_SVRSP_TOY_LOGIN (0x92) whether or not it accepts.
+def control_servo(number: int, action: int, value: int, sequence: int) -> bytes:
+    """A CONTROL_SERVO (0x22) frame: {byte number, byte action, short value}.
+
+    `value` goes out little-endian - the factory app does not byte-swap it.
+    Prefer move() and head(), which validate and cap; this is the raw builder.
     """
-    return build_frame(CMD_TOY_LOGIN, sequence, password.encode("ascii") + b"\x00")
+    for name, byte in (("number", number), ("action", action)):
+        if not isinstance(byte, int) or not 0 <= byte <= 0xFF:
+            raise ValueError(f"invalid_{name}")
+    if not isinstance(value, int) or not 0 <= value <= 0xFFFF:
+        raise ValueError("invalid_value")
+    payload = bytes([number, action]) + value.to_bytes(2, "little")
+    return build_frame(CMD_CONTROL_SERVO, sequence, payload)
+
+
+def _duration(duration_ms: Any, cap: int) -> int:
+    # bool is an int subclass; True would otherwise pass as 1 ms.
+    if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or duration_ms <= 0:
+        raise ValueError("invalid_duration")
+    return min(duration_ms, cap)
+
+
+def move(direction: str, duration_ms: int, sequence: int) -> bytes:
+    """Drive the wheels: servo 1, forward 4 / backward 3 / left 2 / right 1.
+
+    Duration is capped here rather than trusting the caller: this is the last
+    point before bytes reach a motor board.
+
+    As of 2026-09-16 the board acks this five times out of five (result 0), but
+    the wheels have not been confirmed to turn. Directions follow the factory
+    naming and are not yet physically confirmed.
+    """
+    if direction not in DRIVE_ACTIONS:
+        raise ValueError("invalid_direction")
+    duration_ms = _duration(duration_ms, MAX_DURATION_MS)
+    return control_servo(SERVO_DRIVE, DRIVE_ACTIONS[direction], duration_ms, sequence)
+
+
+def head(motion: str, duration_ms: int, sequence: int) -> bytes:
+    """Move the head: servo 2, rise 1 / bow 2."""
+    if motion not in HEAD_ACTIONS:
+        raise ValueError("invalid_head_motion")
+    duration_ms = _duration(duration_ms, MAX_HEAD_MS)
+    return control_servo(SERVO_HEAD, HEAD_ACTIONS[motion], duration_ms, sequence)
+
+
+def parse_general_response(frame: dict[str, Any]) -> dict[str, int] | None:
+    """Decode a serial GENERAL_RESPONSE (0x01): which of OUR frames it answers.
+
+    Payload is {byte src_sequence, byte src_command, int result}. The frame's
+    own sequence byte is the board's counter; src_sequence echoes ours, so match
+    replies on (src_sequence, src_command). Every result seen so far is 0, so
+    the byte order of `result` is assumed little-endian (like the servo value)
+    but unconfirmed.
+    """
+    if frame is None or frame.get("command") != CMD_GENERAL_RESPONSE:
+        return None
+    payload = frame["payload"]
+    if len(payload) < 6:
+        return None
+    return {
+        "src_sequence": payload[0],
+        "src_command": payload[1],
+        "result": int.from_bytes(payload[2:6], "little", signed=True),
+    }
 
 
 def parse_frame(data: bytes) -> dict[str, Any] | None:
@@ -253,33 +325,28 @@ def iter_frames(data: bytes):
         offset = start + len(frame["raw"])
 
 
-def command_line(text: str, sequence: int,
-                 operation: int = MSGOP_DEV_COMMAND) -> bytes:
-    """A COMMAND_LINE packet: operation (int) + text + crc."""
-    if not isinstance(text, str) or not text or len(text) > 200:
-        raise ValueError("invalid_command_text")
-    payload = operation.to_bytes(4, "big") + text.encode("ascii") + b"\x00"
-    return build_frame(CMD_SERIAL_COMMAND_LINE, sequence, payload)
-
-
-def move(direction: str, duration_ms: int, sequence: int) -> bytes:
-    """Build a movement frame.
-
-    Duration is capped here rather than trusting the caller: this is the last
-    point before bytes reach a motor board.
-    """
-    if direction not in MOVE_COMMANDS:
-        raise ValueError("invalid_direction")
-    if not isinstance(duration_ms, int) or duration_ms <= 0:
-        raise ValueError("invalid_duration")
-    duration_ms = min(duration_ms, MAX_DURATION_MS)
-    return command_line(MOVE_COMMANDS[direction].format(ms=duration_ms), sequence)
-
-
 def describe(frame: dict[str, Any]) -> str:
     """Human-readable summary, for reading captures."""
     name = frame["command_name"]
     payload = frame["payload"]
+    ack = parse_general_response(frame)
+    if ack is not None:
+        answered = COMMAND_NAMES.get(ack["src_command"], f"0x{ack['src_command']:02X}")
+        return (f"ack {answered} seq={ack['src_sequence']} result={ack['result']}"
+                + ("" if ack["result"] == 0 else " (REFUSED)"))
+    if frame["command"] == CMD_CONTROL_SERVO and len(payload) >= 4:
+        value = int.from_bytes(payload[2:4], "little")
+        if payload[0] == SERVO_DRIVE:
+            motion = {v: k for k, v in DRIVE_ACTIONS.items()}.get(payload[1], f"action {payload[1]}")
+            return f"drive {motion} {value} ms"
+        if payload[0] == SERVO_HEAD:
+            motion = {v: k for k, v in HEAD_ACTIONS.items()}.get(payload[1], f"action {payload[1]}")
+            return f"head {motion} {value} ms"
+        return f"servo {payload[0]} action {payload[1]} value {value}"
+    if frame["command"] == CMD_CONTROL_PANTILT and len(payload) >= 2:
+        part = {PANTILT_LASER_PEN: "laser pen", PANTILT_CAT_WHIP: "cat whip"}.get(
+            payload[0], f"pantilt {payload[0]}")
+        return f"{part} action {payload[1]} values {payload[2:].hex(' ')}"
     if frame["command"] == CMD_KEY_EVENT and len(payload) >= 2:
         key = KEY_NAMES.get(payload[0], str(payload[0]))
         action = KEY_ACTION_NAMES.get(payload[1], str(payload[1]))

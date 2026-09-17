@@ -47,11 +47,8 @@ TAP_BAUD = 115200
 # Herbie's own frames are pushed here before being written to his serial port.
 STAGING = "/sdcard/.herbie_console_frame.bin"
 
-# Duration is capped in the protocol module too; this is a second, visible cap
-# because the console puts movement behind a button a human can hold down.
-MAX_MOVE_MS = 2000
-
-DIRECTIONS = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+# Directions and duration caps live in herbie_vava_protocol (move()/head()), the
+# last point before bytes reach a motor board. The console does not redefine them.
 
 
 def _token() -> str:
@@ -167,16 +164,15 @@ class Tap:
             key = vava.KEY_NAMES.get(p[0], f"sensor {p[0]}")
             action = vava.KEY_ACTION_NAMES.get(p[1], str(p[1]))
             return f"{key} -> {action}"
-        if cmd == vava.CMD_GENERAL_RESPONSE and len(p) >= 2:
-            orig = vava.COMMAND_NAMES.get(p[1], f"0x{p[1]:02X}")
-            return f"acknowledged: {orig} (msg #{p[0]})"
-        if cmd == vava.CMD_CONTROL_PANTILT and len(p) >= 4:
-            name = {4: "forward", 3: "backward", 2: "left", 1: "right"}.get(p[1], f"dir {p[1]}")
-            return f"MOVE {name} for {(p[2] << 8) | p[3]} ms"
+        ack = vava.parse_general_response(frame)
+        if ack is not None:
+            orig = vava.COMMAND_NAMES.get(ack["src_command"], f"0x{ack['src_command']:02X}")
+            verdict = "OK" if ack["result"] == 0 else f"REFUSED (result {ack['result']})"
+            return f"acknowledged: {orig} (msg #{ack['src_sequence']}) {verdict}"
+        if cmd == vava.CMD_CONTROL_SERVO and len(p) >= 4:
+            return "MOVE " + vava.describe(frame)
         if cmd == vava.CMD_CONTROL_LIGHT and len(p) >= 6:
             return f"light {p[0]}: action {p[1]}, colour {p[2]}"
-        if cmd == vava.CMD_CONTROL_SERVO and len(p) >= 4:
-            return f"servo {p[0]}: action {p[1]}"
         return vava.describe(frame)
 
 
@@ -205,18 +201,23 @@ def ensure_forward():
 
 # ------------------------------------------------------------------- movement
 def send_move(direction: str, duration_ms: int) -> dict:
-    """Push one CONTROL_PANTILT frame to Herbie's board and write it to the UART.
+    """Push one drive or head frame to Herbie's board and write it to the UART.
 
-    Herbie's Android side reboots every few minutes, so this reports a clear
-    'he is not reachable' rather than raising.
+    Frames come from the protocol module's move()/head(), which build
+    CONTROL_SERVO (0x22) and own the duration caps. An earlier version of this
+    console built CONTROL_PANTILT (0x23) here, which is the laser/cat whip.
     """
-    if direction not in DIRECTIONS:
-        return {"ok": False, "error": "unknown direction"}
-    duration_ms = max(1, min(int(duration_ms), MAX_MOVE_MS))
-    payload = bytes([1, DIRECTIONS[direction],
-                     (duration_ms >> 8) & 0xFF, duration_ms & 0xFF])
-    frame = vava.to_wire(vava.build_frame(vava.CMD_CONTROL_PANTILT,
-                                          int(time.time()) & 0xFF, payload))
+    try:
+        seq = int(time.time()) & 0xFF
+        if direction in vava.DRIVE_ACTIONS:
+            built = vava.move(direction, int(duration_ms), seq)
+        elif direction.startswith("head_") and direction[5:] in vava.HEAD_ACTIONS:
+            built = vava.head(direction[5:], int(duration_ms), seq)
+        else:
+            return {"ok": False, "error": "unknown direction"}
+    except (TypeError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    frame = vava.to_wire(built)
     local = os.path.join(HERE, ".frame.bin")
     with open(local, "wb") as fh:
         fh.write(frame)
