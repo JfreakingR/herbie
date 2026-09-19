@@ -1,5 +1,12 @@
 # Herbie handoff — reboot loop fixed, drive refusal narrowed to the robot
 
+> **§4 IS WRONG — superseded 2026-09-18.** The "drive refusal" does not exist.
+> The factory app's REST path stamps sequence 0, which the STM32 discards
+> unheard, so the ground-truth comparison below compared two frames that were
+> never equivalent. With a real sequence he acks and drives. §1 (reboots) and
+> §3 (port 1666) still stand. See
+> `HERBIE_HANDOFF_2026-09-18_SEQUENCE_AND_IR.md`.
+
 Date: 2026-09-17 (America/New_York)
 Repo: `JfreakingR/herbie`, branch `master` (private). Local commits not yet pushed — see §6.
 
@@ -139,7 +146,7 @@ the same refusal our own frames get.
 | App stuck in "rebooting" state | sent within the healthy window after an app restart | refused |
 | Needs dispenser servo first (replay of 09-16 run 2) | servo 2 → 6 s → wheels fwd 2000 | refused |
 | Byte order of duration | value `04 04` (same both ways) | refused |
-| Our frame format | factory app sent it itself (above) | refused, bytes identical |
+| Our frame format | factory app sent it itself (above) | ~~refused, bytes identical~~ **WRONG — the REST path forces sequence 0; see 09-18** |
 | Battery low | beep light is **solid** red (manual: low battery = *flashing*) | unlikely |
 | Charger interlock | owner: charger not plugged in | ruled out |
 | Motor wiring | owner: wires fine | ruled out (visual) |
