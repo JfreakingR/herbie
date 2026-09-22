@@ -1,0 +1,141 @@
+#line 1 "C:\\Users\\Phyllis\\Desktop\\Herbie\\firmware\\vava_uart_version_probe\\vava_uart_version_probe.ino"
+// One-shot, non-motion query of Herbie's original STM32 controller.
+// The ESP32 is USB-powered. J21 TX -> GPIO34, J21 GND -> GND.
+// After a powered-off wiring check, J21 RX may be connected to GPIO17.
+// Never connect J21 3.3V to the ESP32. This sketch contains no drive command.
+
+#include <Arduino.h>
+
+HardwareSerial controller(2);
+constexpr int REPLY_RX_PIN = 34;
+constexpr int COMMAND_TX_PIN = 17;
+constexpr uint32_t UART_BAUD = 115200;
+constexpr uint8_t VERSION_QUERY[] = {0x00, 0xAA, 0x55, 0x00, 0x03, 0x26, 0x01, 0xDB};
+
+char input[12] = {};
+size_t inputLength = 0;
+bool querySent = false;
+bool txActive = false;
+uint32_t releaseTxAt = 0;
+uint32_t lastReport = 0;
+uint32_t receivedCount = 0;
+uint32_t zeroCount = 0;
+uint32_t ffCount = 0;
+uint32_t headerCount = 0;
+uint8_t previousByte = 0;
+uint8_t reply[80] = {};
+size_t replyLength = 0;
+size_t expectedLength = 0;
+
+void inspectReply(uint8_t value) {
+  if (previousByte == 0xAA && value == 0x55) {
+    ++headerCount;
+    reply[0] = 0xAA;
+    reply[1] = 0x55;
+    replyLength = 2;
+    expectedLength = 0;
+  } else if (replyLength >= 2 && replyLength < sizeof(reply)) {
+    reply[replyLength++] = value;
+    if (replyLength == 4) {
+      expectedLength = 4 + (static_cast<size_t>(reply[2]) << 8) + reply[3];
+      if (expectedLength < 7 || expectedLength > sizeof(reply)) {
+        replyLength = 0;
+      }
+    }
+    if (expectedLength != 0 && replyLength == expectedLength) {
+      uint8_t checksum = 0;
+      for (size_t i = 0; i + 1 < replyLength; ++i) {
+        checksum ^= reply[i];
+      }
+      Serial.printf("FRAME %s:", checksum == reply[replyLength - 1] ? "VALID" : "BAD_CRC");
+      for (size_t i = 0; i < replyLength; ++i) {
+        Serial.printf(" %02X", reply[i]);
+      }
+      Serial.println();
+      replyLength = 0;
+    }
+  }
+  previousByte = value;
+}
+
+void sendVersionQuery() {
+  if (querySent) {
+    Serial.println("QUERY_ALREADY_SENT: reset the ESP32 to repeat");
+    return;
+  }
+
+  // The output remains high impedance until the exact USB command arrives.
+  controller.end();
+  controller.begin(UART_BAUD, SERIAL_8N1, REPLY_RX_PIN, COMMAND_TX_PIN);
+  delay(20);
+  controller.write(VERSION_QUERY, sizeof(VERSION_QUERY));
+  controller.flush();
+  querySent = true;
+  txActive = true;
+  releaseTxAt = millis() + 1500;
+  Serial.println("VERSION_QUERY_SENT: 00 AA 55 00 03 26 01 DB");
+}
+
+void setup() {
+  pinMode(COMMAND_TX_PIN, INPUT);
+  Serial.begin(115200);
+  controller.begin(UART_BAUD, SERIAL_8N1, REPLY_RX_PIN, -1);
+  delay(500);
+  Serial.println("Herbie STM32 version probe. No motion commands present.");
+  Serial.println("Send exactly QUERY followed by Enter for one version query.");
+}
+
+void loop() {
+  size_t processed = 0;
+  while (controller.available() && processed++ < 1024) {
+    int raw = controller.read();
+    if (raw < 0) {
+      break;
+    }
+    uint8_t value = static_cast<uint8_t>(raw);
+    ++receivedCount;
+    zeroCount += value == 0x00;
+    ffCount += value == 0xFF;
+    inspectReply(value);
+  }
+  if (txActive && static_cast<int32_t>(millis() - releaseTxAt) >= 0) {
+    controller.end();
+    pinMode(COMMAND_TX_PIN, INPUT);
+    controller.begin(UART_BAUD, SERIAL_8N1, REPLY_RX_PIN, -1);
+    txActive = false;
+    Serial.println("TX_RELEASED");
+  }
+  if (millis() - lastReport >= 2000) {
+    Serial.printf("RX_STATS total=%lu zero=%lu ff=%lu headers=%lu\n",
+                  static_cast<unsigned long>(receivedCount),
+                  static_cast<unsigned long>(zeroCount),
+                  static_cast<unsigned long>(ffCount),
+                  static_cast<unsigned long>(headerCount));
+    lastReport = millis();
+    receivedCount = zeroCount = ffCount = headerCount = 0;
+  }
+
+  while (Serial.available()) {
+    char value = static_cast<char>(Serial.read());
+    if (value == '\r') {
+      continue;
+    }
+    if (value == '\n') {
+      input[inputLength] = '\0';
+      if (strcmp(input, "QUERY") == 0) {
+        sendVersionQuery();
+      } else if (inputLength != 0) {
+        Serial.println("IGNORED: only QUERY is accepted");
+      }
+      inputLength = 0;
+      continue;
+    }
+    if (inputLength + 1 < sizeof(input)) {
+      input[inputLength++] = value;
+    } else {
+      inputLength = 0;
+      Serial.println("IGNORED: command too long");
+    }
+  }
+}
+
