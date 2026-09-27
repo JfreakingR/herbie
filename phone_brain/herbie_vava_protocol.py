@@ -165,6 +165,9 @@ KEY_ACTION_NAMES = {0: "click", 1: "short_hold", 2: "long_hold",
 #     have 6 tokens where the 0x23 branch demands 7, so the factory app itself
 #     throws and sends nothing. They are dead code, not a recipe.
 SERVO_DRIVE = 1
+# On Herbie, servo 2 is NOT a head: it drove the two treat-dispenser doors, and
+# the owner removed those servos (confirmed 2026-09-27). "Head" is the name from
+# another SEGO model sharing this firmware. Sending it now moves nothing.
 SERVO_HEAD = 2
 FACTORY_DRIVE_ACTIONS = {"forward": 4, "backward": 3, "left": 2, "right": 1}
 # Herbie's left and right track motor plugs were swapped during reassembly on
@@ -181,6 +184,9 @@ PANTILT_CAT_WHIP = 2
 # LBE.swap16, so it goes out big-endian. Peripheral numbers are TermSegoValue's.
 #
 # The treat wheel on top of the head is the "snack lattices" (peripheral 4).
+# It has its own motor, separate from the removed servo-2 doors, and is still
+# fitted (owner, 2026-09-27). The owner plans to mount a camera on it and use
+# it as Herbie's neck, so treat_wheel() is effectively "turn the neck a step".
 # The factory self-test (SelfCheckTask, "Test snack lattices") turns it with
 # exactly `toggle_peripheral,0,0,4,1,0`, then reads peripheral status to see
 # that it moved. The app's scheduled feed (BoardConfigManager.onTimer) instead
