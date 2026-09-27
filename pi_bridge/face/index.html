@@ -64,7 +64,8 @@
       transition: transform 0.28s ease;
     }
     #dock.open, #dock:hover { transform: translateY(0); }
-    body.kiosk #dock { display: none; }
+    /* Kiosk hides the dock until the face is tapped or a key is typed. */
+    body.kiosk #dock:not(.open) { display: none; }
     .grab {
       align-self: center;
       width: 48px;
@@ -852,6 +853,16 @@
 
   svg.addEventListener("click", () => dock.classList.toggle("open"));
   dock.querySelector(".grab").addEventListener("click", () => dock.classList.add("open"));
+  window.addEventListener("keydown", (e) => {
+    if (e.target === $("say")) {
+      if (e.key === "Escape") { dock.classList.remove("open"); $("say").blur(); }
+      return;
+    }
+    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+    dock.classList.add("open");
+    $("say").value = "";
+    $("say").focus();
+  });
 
   applyEmotion(params.get("emotion") || "happy", 1);
   setMode("idle");
@@ -885,10 +896,13 @@
   };
 
   let grokBusy = false;
+  let brainName = "my cortex";
+  let brainHelp = "Check the xAI key.";
   let sentenceQ = Promise.resolve();
-  function queueSpeak(text, emotion) {
+  function queueSpeak(text, emotion, voiced = true) {
     sentenceQ = sentenceQ.then(async () => {
       if (emotion) api.setEmotion(emotion);
+      if (!voiced) return;
       await api.speak(text);
     }).catch(() => {});
     return sentenceQ;
@@ -914,6 +928,7 @@
       let buf = "";
       let pending = "";
       let emotion = "happy";
+      let spokenBy = "screen";
       api.startTalking();
       while (true) {
         const { value, done } = await reader.read();
@@ -927,21 +942,23 @@
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.type === "error") {
             api.setEmotion("sorry");
-            await queueSpeak("I couldn't reach my cortex. Check the xAI key.", "sorry");
+            await queueSpeak(`I couldn't reach ${brainName}. ${brainHelp}`, "sorry");
             throw new Error(ev.error || "grok_error");
           }
           if (ev.type === "token") pending += ev.text || "";
           if (ev.type === "done") {
             emotion = ev.emotion || FACE_FROM_HERBIE[ev.herbie_expression] || "happy";
             pending = ev.text || pending;
+            spokenBy = ev.spoken_by || "screen";
           }
         }
       }
       const cleaned = pending.replace(/^EMOTION:\s*\w+\s*/i, "").trim() || pending.trim();
       api.stopTalking();
       showCaption(cleaned);
-      await queueSpeak(cleaned, emotion);
-      api.idle();
+      // When the Galaxy says it aloud, its speaking flag moves the mouth.
+      await queueSpeak(cleaned, emotion, spokenBy !== "galaxy");
+      if (spokenBy !== "galaxy") api.idle();
     } catch (err) {
       api.stopTalking();
       api.idle();
@@ -958,9 +975,14 @@
     try {
       const s = await fetch("/status", { cache: "no-store" }).then((r) => r.json());
       if (!s || !s.companion) return false;
-      const grok = !!s.grok;
+      const grok = !!(s.grok || s.brain);
       const herbie = !!s.herbie;
-      statusEl.textContent = (grok ? "Grok" : "face only") + (herbie ? " · Herbie" : "");
+      if (s.brain && !s.grok) {
+        brainName = "my brain";
+        brainHelp = "Is the Galaxy plugged in?";
+      }
+      statusEl.textContent = s.brain && !s.grok ? "Herbie" + (s.brain_ready ? "" : " · brain offline")
+        : (grok ? "Grok" : "face only") + (herbie ? " · Herbie" : "");
       $("say").value = grok ? "What's on your mind?" : $("say").value;
       $("btn-say").textContent = grok ? "Ask me" : "Talk";
       window.removeEventListener("pointerdown", first);
@@ -969,6 +991,7 @@
         const ask = () => {
           const t = $("say").value;
           $("say").value = "";
+          if (document.body.classList.contains("kiosk")) { dock.classList.remove("open"); $("say").blur(); }
           askGrok(t);
         };
         $("btn-say").onclick = ask;
@@ -976,7 +999,9 @@
         $("say").onkeydown = (e) => { if (e.key === "Enter") ask(); };
         api.setEmotion("happy");
         api.idle();
-        showCaption("I'm in here. Ask me anything.");
+        showCaption(s.brain && !s.grok && !s.brain_ready
+          ? "My brain isn't answering. Is the Galaxy plugged in?"
+          : "I'm in here. Ask me anything.");
       } else if (herbie) {
         api.setEmotion("happy");
         api.idle();
