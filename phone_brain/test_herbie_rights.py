@@ -345,6 +345,11 @@ class ApiTokenTests(unittest.TestCase):
         self.assertEqual(calls, 1)
         self.assertEqual(cloud_args.kwargs["image"], b"\xff\xd8jpeg")
 
+        # Asked plainly but the brain said it can't see: he looks anyway.
+        body = chat("Sorry, I can't see anything.")
+        self.assertEqual(body["text"], "Let me have a look. A cat on the sofa.")
+        self.assertEqual(replies[-1][0], 1)
+
         # Turning and looking: no photo yet; it is owed once the turn is done.
         self._post("/v1/neck/claim", {"facing": 0}, token).read()
         body = chat("Turning round. [look 180] [see]")
@@ -386,6 +391,7 @@ class ApiTokenTests(unittest.TestCase):
         self.assertNotIn("memory_count", anon)
         self.assertFalse(anon["motor_authority"])
         self.assertEqual(anon["safe_motion_state"], "STOP")
+        self.assertEqual(set(anon["sight"]), {"camera_allowed", "cloud_brain"})
 
         full = json.loads(self._get("/health", token="test-token-value").read())
         self.assertIn("memory_count", full)

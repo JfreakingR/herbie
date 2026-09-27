@@ -26,7 +26,7 @@ import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.13.0"
+SERVICE_VERSION = "0.13.1"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
 NECK = herbie_neck.NeckState()
 TOKEN_PATH = Path(
@@ -197,6 +197,10 @@ class PalHandler(BaseHTTPRequestHandler):
                         "version": SERVICE_VERSION,
                         "network_scope": NETWORK_SCOPE,
                         "ready": True,
+                        "sight": {
+                            "camera_allowed": herbie_eyes.camera_permitted(),
+                            "cloud_brain": herbie_cloud.load_config() is not None,
+                        },
                         "authenticated": False,
                         "motor_authority": False,
                         "safe_motion_state": "STOP",
@@ -423,6 +427,11 @@ class PalHandler(BaseHTTPRequestHandler):
             response["text"], look = herbie_neck.extract_look(response["text"])
             response["text"], see = herbie_eyes.extract_see(response["text"])
             question = request["message"].strip()
+            if eyes_ok and not see and herbie_eyes.asks_to_see(question):
+                # Asked plainly to look: look, and drop a reply that guessed
+                # without a photo.
+                see = True
+                response["text"] = "Let me have a look." if look is None else response["text"]
             if look is not None and neck_line:
                 # Turning and looking: the photo waits until the turn is done
                 # and he says what he sees then (see_after_turn).

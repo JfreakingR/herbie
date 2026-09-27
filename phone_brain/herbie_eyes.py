@@ -43,6 +43,14 @@ SEEN_PROMPT = (
 )
 
 _SEE = re.compile(r"\[\s*see\s*\]", re.IGNORECASE)
+# Someone plainly asking him to look. Small brains often answer "I can't see"
+# instead of writing [see], so these take the photo whatever the reply says.
+_ASKS_TO_SEE = re.compile(
+    r"\bwhat (?:can|do) you see\b|\bwhat are you (?:looking at|seeing)\b"
+    r"|\bcan you see\b|\bdo you see\b|\bwhat(?:'s| is) in front of you\b"
+    r"|\b(?:take a )?look (?:at|around)\b|\bhave a look\b",
+    re.IGNORECASE,
+)
 
 
 class EyesUnavailable(RuntimeError):
@@ -57,6 +65,11 @@ def extract_see(text: str) -> tuple[str, bool]:
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r" +([,.!?;:])", r"\1", cleaned).strip()
     return cleaned, True
+
+
+def asks_to_see(message: str) -> bool:
+    """True when the person is plainly asking him to look."""
+    return bool(_ASKS_TO_SEE.search(message))
 
 
 def camera_permitted() -> bool:

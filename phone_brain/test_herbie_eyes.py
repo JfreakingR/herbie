@@ -20,6 +20,17 @@ class ExtractSeeTests(unittest.TestCase):
         self.assertEqual(eyes.extract_see("Hi there"), ("Hi there", False))
 
 
+class AsksToSeeTests(unittest.TestCase):
+    def test_plain_requests_to_look(self):
+        for message in ("Herbie, what can you see?", "What do you see", "can you see me?",
+                        "look at this", "have a look around", "what's in front of you?"):
+            self.assertTrue(eyes.asks_to_see(message), message)
+
+    def test_ordinary_talk(self):
+        for message in ("hello", "see you later", "I see", "sing me a song"):
+            self.assertFalse(eyes.asks_to_see(message), message)
+
+
 class LookNowTests(unittest.TestCase):
     def open_camera(self, reply=None, error=None, permitted=True):
         with mock.patch.object(eyes, "camera_permitted", return_value=permitted), \

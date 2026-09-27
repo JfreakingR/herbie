@@ -121,6 +121,15 @@ else { Problem 'The Herbie Brain app is not running.' 'See its lines above; open
 try {
     $health = Invoke-RestMethod -Uri 'http://127.0.0.1:18765/health' -TimeoutSec 5
     Ok "Brain answers: version $($health.version), ready=$($health.ready)."
+    if (-not $health.sight) {
+        Problem "His brain is the old version $($health.version), without sight or the neck." `
+            'In Termux: bash /sdcard/Download/PalBrain/install_pal_brain.sh'
+    } else {
+        if ($health.sight.camera_allowed) { Ok 'His brain is allowed to use the camera.' }
+        else { Problem 'The camera is switched off in his brain (privacy mode, or camera off).' 'Turn privacy mode off / camera on in his settings.' }
+        if ($health.sight.cloud_brain) { Ok 'His cloud brain is set up (it reads the photos).' }
+        else { Problem 'No cloud brain key on the phone, and only the cloud brain can read photos.' 'Run tools\Set-Herbie-Cloud-Keys.ps1 again.' }
+    }
 } catch {
     Problem 'The brain does not answer on port 8765.' 'If it is running, give it a minute; otherwise see above.'
 }
