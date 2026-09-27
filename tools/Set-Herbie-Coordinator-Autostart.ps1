@@ -1,6 +1,6 @@
 <# Install or remove the current-user logon task for Herbie's coordinator. #>
 [CmdletBinding()]
-param([switch]$Remove)
+param([switch]$Remove, [switch]$Neck)
 
 $ErrorActionPreference = 'Stop'
 $TaskName = 'Herbie Computer Coordinator'
@@ -24,6 +24,8 @@ if (-not (Test-Path -LiteralPath $startScript)) {
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $escapedScript = $startScript.Replace('"', '\"')
 $arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$escapedScript`""
+# -Neck: the coordinator started at logon also turns Herbie's neck.
+if ($Neck) { $arguments += ' -Neck' }
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
 $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
