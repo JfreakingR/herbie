@@ -1,6 +1,6 @@
 <# Start Herbie's computer-primary lease coordinator in the background. #>
 [CmdletBinding()]
-param([string]$Phone, [switch]$Neck, [switch]$Drive)
+param([string]$Phone, [switch]$Neck, [switch]$Drive, [string]$Board)
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path $PSScriptRoot -Parent
@@ -71,6 +71,12 @@ if ($Phone) { $arguments += @('--phone', $Phone) }
 if ($Neck) { $arguments += @('--neck') }
 # -Drive lets Herbie's brains drive his tracks, moves of at most 2 s each.
 if ($Drive) { $arguments += @('--drive') }
+# -Board <ip> reaches the VAVA board over Wi-Fi ADB instead of USB. It needs
+# `adb tcpip 5555` run once over USB after each board restart.
+if ($Board) {
+    $env:HERBIE_ADB_TARGET = if ($Board -match ':\d+$') { $Board } else { "${Board}:5555" }
+    Write-Host "Motor board over Wi-Fi: $env:HERBIE_ADB_TARGET"
+}
 $process = Start-Process -FilePath $Python -ArgumentList $arguments `
     -WindowStyle Hidden -RedirectStandardOutput $LogFile `
     -RedirectStandardError $ErrorLog -PassThru
