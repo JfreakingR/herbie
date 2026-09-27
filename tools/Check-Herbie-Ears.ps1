@@ -52,7 +52,7 @@ else { Problem 'Notifications are off for the app.' 'Settings > Apps > Bonsai (H
 
 # Does the running service actually hold the microphone? Type bit 0x80.
 $services = Shell "dumpsys activity services $Package"
-if ($services -match 'foregroundServiceType=0x([0-9a-fA-F]+)') {
+if ($services -match '(?:foregroundServiceType|types)=0x([0-9a-fA-F]+)') {
     $types = [Convert]::ToInt64($Matches[1], 16)
     if ($types -band 0x80) { Ok 'His service holds the microphone.' }
     else {
@@ -84,6 +84,10 @@ if (-not $log) {
     if ($text -match 'No speech recognizer') { Problem 'The phone has no speech recognizer available.' 'Install/enable the Google app or "Speech Recognition and Synthesis from Google".' }
     if ($text -match 'Brain unavailable') { Problem 'He heard you but could not reach his brain.' 'Run tools\Check-Herbie-Boot.ps1.' }
     if ($text -match 'Heard \(') { Ok 'He is hearing speech (see the Heard lines above).' }
+    if ($text -notmatch 'HerbieEars|without ears|Brain token missing') {
+        Problem 'No hearing code ran at all - the installed app is probably an old build without ears.' `
+            'adb install -r android_brain\release\HerbieBrain-debug.apk, then force stop and open the app.'
+    }
     if ($text -match 'Playback failed') { Problem 'He tried to speak and playback failed.' 'Check the speaker / Bluetooth connection.' }
 }
 
