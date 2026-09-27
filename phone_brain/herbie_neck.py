@@ -1,6 +1,7 @@
 """Herbie's neck, as the brain sees it.
 
-The neck is the old treat wheel on top of his head with a camera on it. It
+The neck is the old treat wheel on top of his head. A camera is to go on it,
+but no brain receives images yet, so the skill tells him he cannot see. It
 turns one way only, in 22.5-degree steps, about ten seconds a step. The wheel
 itself is driven from the Windows computer (the only machine with a link to
 the VAVA motor board); this module is the phone's side of that arrangement:
@@ -31,13 +32,14 @@ CONTROLLER_TIMEOUT_S = 30.0     # no check-in for this long = no neck
 REQUEST_TTL_S = 120.0           # an unclaimed wish to look goes stale
 
 NECK_SKILL = (
-    "Your wheels stay off, but you can turn your head: a camera on a wheel on "
-    "top of you. It turns only one way, slowly, about ten seconds per 22.5 "
-    "degrees, so a full look behind you takes over a minute. To turn it, put "
-    "[look N] anywhere in your reply, where N is 0 to 359 degrees from straight "
-    "ahead in the direction it turns (0 faces forward again). Use it when you "
-    "actually want to see something or someone asks you to look; at most one "
-    "per reply. The tag is removed before you speak, so don't read it out."
+    "Your wheels stay off, but you can turn your head: a wheel on top of you. "
+    "It turns only one way, slowly, about ten seconds per 22.5 degrees, so a "
+    "full turn behind you takes over a minute. To turn it, put [look N] "
+    "anywhere in your reply, where N is 0 to 359 degrees from straight ahead in "
+    "the direction it turns (0 faces forward again). Use it when someone asks "
+    "you to turn or face them; at most one per reply. You cannot see yet - no "
+    "picture reaches you - so never describe what you would see or claim to "
+    "have seen anything. The tag is removed before you speak, so don't read it out."
 )
 
 _LOOK = re.compile(
