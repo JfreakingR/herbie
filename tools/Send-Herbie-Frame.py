@@ -42,6 +42,7 @@ that write's outcome is unclear this script says so and leaves it to a human.
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -155,21 +156,29 @@ def main(argv):
     print(f"target {target}  seq 0x{sequence:02X}  {frame.hex(' ').upper()}")
     print("   ", vava.describe(vava.parse_frame(frame)))
 
-    local = os.path.join(REPO, "tools", ".frame.bin")
-    with open(local, "wb") as fh:
-        fh.write(frame)
-
-    # Pushing a file is idempotent, so retrying it cannot move anything.
-    for attempt in range(3):
-        push = adb(target, "push", local, STAGING)
-        if push.returncode == 0:
-            break
-        if not ensure_link(target):
-            print("lost him while staging the frame")
+    # A fresh temp file per run. Reusing tools/.frame.bin failed on Windows
+    # (OSError 22) when runs came back to back - something (antivirus, sync)
+    # still held the previous run's copy.
+    fd, local = tempfile.mkstemp(prefix="herbie_frame_", suffix=".bin")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(frame)
+        # Pushing a file is idempotent, so retrying it cannot move anything.
+        for attempt in range(3):
+            push = adb(target, "push", local, STAGING)
+            if push.returncode == 0:
+                break
+            if not ensure_link(target):
+                print("lost him while staging the frame")
+                return 1
+        else:
+            print("push failed:", push.stderr.decode(errors="replace").strip())
             return 1
-    else:
-        print("push failed:", push.stderr.decode(errors="replace").strip())
-        return 1
+    finally:
+        try:
+            os.remove(local)
+        except OSError:
+            pass
 
     # The actuation. Exactly one attempt, whatever happens.
     try:
