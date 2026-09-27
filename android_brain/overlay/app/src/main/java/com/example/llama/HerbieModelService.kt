@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
@@ -24,12 +26,16 @@ class HerbieModelService : Service() {
     private val inferenceMutex = Mutex()
     private var engine: InferenceEngine? = null
     private var bridge: LocalBridgeServer? = null
+    private var voice: HerbieVoice? = null
+    private var ears: HerbieEars? = null
     @Volatile private var loading = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, notification("Starting local conversation model…"))
+        val canHear = startInForeground()
+        voice = HerbieVoice(this)
+        if (canHear) startEars()
         startModelIfNeeded()
     }
 
@@ -39,6 +45,44 @@ class HerbieModelService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android 14+ only lets a service use the microphone if it says so when it
+     * goes foreground, and refuses that type when started from the background
+     * (e.g. at boot). Returns whether the microphone type was granted.
+     */
+    private fun startInForeground(): Boolean {
+        val starting = notification("Starting local conversation model…")
+        val micGranted = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (micGranted) {
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    starting,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                )
+                return true
+            } catch (refused: Exception) {
+                Log.w(TAG, "Microphone foreground refused; running without ears", refused)
+            }
+        }
+        startForeground(NOTIFICATION_ID, starting, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        return false
+    }
+
+    private fun startEars() {
+        val brainToken = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+            .getString(BRAIN_TOKEN_KEY, null)
+            ?.trim()
+            ?.takeIf { it.length >= 16 }
+        if (brainToken == null) {
+            Log.w(TAG, "Brain token missing; ears stay off")
+            return
+        }
+        ears = HerbieEars(this, checkNotNull(voice), brainToken).also { it.start() }
+    }
 
     private fun startModelIfNeeded() {
         if (loading || bridge != null) return
@@ -62,6 +106,8 @@ class HerbieModelService : Service() {
                 bridge = LocalBridgeServer(
                     localEngine,
                     inferenceMutex,
+                    checkNotNull(voice),
+                    { ears },
                     token,
                     model.name,
                 ).also { it.start() }
@@ -119,6 +165,10 @@ class HerbieModelService : Service() {
     override fun onDestroy() {
         bridge?.stop()
         bridge = null
+        ears?.stop()
+        ears = null
+        voice?.shutdown()
+        voice = null
         engine?.destroy()
         engine = null
         scope.cancel()
@@ -131,6 +181,7 @@ class HerbieModelService : Service() {
         private const val NOTIFICATION_ID = 8766
         private const val PREFERENCES = "herbie_private_bridge"
         private const val TOKEN_KEY = "bridge_token"
+        private const val BRAIN_TOKEN_KEY = "brain_token"
         private const val SYSTEM_PROMPT =
             "You are Herbie, a warm local robot companion. Talk naturally, respond directly, " +
                 "use contractions, and keep ordinary replies brief. Ask a follow-up only when " +

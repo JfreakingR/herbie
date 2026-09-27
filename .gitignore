@@ -51,3 +51,14 @@ api-token
 # Extracted dex and string dumps for the dex tools - re-derivable from the apks.
 ctl_dex/
 strings.txt
+
+# Cloud keys (Anthropic, ElevenLabs) - never commit.
+herbie-cloud.json
+phone_brain/herbie-cloud.json
+# Herbie's private conversation state on the phone.
+phone_brain/herbie-pending-memories.json
+phone_brain/herbie-recent-dialogue.json
+
+.build/
+tools/.frame.bin
+tools/Set-Herbie-Cloud-Keys.ps1

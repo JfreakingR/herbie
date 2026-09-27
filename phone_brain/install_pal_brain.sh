@@ -12,7 +12,7 @@ fi
 mkdir -p "$TARGET_DIR"
 
 # Service and modules.
-for f in pal_phone_brain.py herbie_memory.py herbie_voice.py herbie_autonomic.py herbie_chat.py; do
+for f in pal_phone_brain.py herbie_memory.py herbie_voice.py herbie_autonomic.py herbie_chat.py herbie_cloud.py herbie_recall.py; do
     cp "$SOURCE_DIR/$f" "$TARGET_DIR/"
 done
 
@@ -24,7 +24,7 @@ done
 # Tests, so the brain can be verified on the device it actually runs on.
 # Written as explicit if-blocks: under `set -e` a bare `[ -f x ] && cmd` whose
 # test fails is a fragile way to express "optional".
-for f in test_herbie_memory.py test_herbie_rights.py test_herbie_autonomic.py test_herbie_voice.py test_herbie_is_free.py; do
+for f in test_herbie_memory.py test_herbie_rights.py test_herbie_autonomic.py test_herbie_voice.py test_herbie_is_free.py test_herbie_cloud.py test_herbie_recall.py; do
     if [ -f "$SOURCE_DIR/$f" ]; then
         cp "$SOURCE_DIR/$f" "$TARGET_DIR/"
     fi
@@ -35,12 +35,23 @@ chmod 600 "$TARGET_DIR/herbie_memory.py"
 chmod 600 "$TARGET_DIR/herbie_voice.py"
 chmod 600 "$TARGET_DIR/herbie_autonomic.py"
 chmod 600 "$TARGET_DIR/herbie_chat.py"
+chmod 600 "$TARGET_DIR/herbie_cloud.py"
+chmod 600 "$TARGET_DIR/herbie_recall.py"
+
+# Cloud keys staged by tools/Set-Herbie-Cloud-Keys.ps1: move them into the
+# private brain directory and never leave a copy on shared storage.
+if [ -f "$SOURCE_DIR/herbie-cloud.json" ]; then
+    cp "$SOURCE_DIR/herbie-cloud.json" "$TARGET_DIR/herbie-cloud.json"
+    chmod 600 "$TARGET_DIR/herbie-cloud.json"
+    rm -f "$SOURCE_DIR/herbie-cloud.json"
+    echo "Cloud keys installed."
+fi
 chmod 700 "$TARGET_DIR/start_pal_brain.sh"
 chmod 700 "$TARGET_DIR/stop_pal_brain.sh"
 chmod 700 "$TARGET_DIR/herbie_supervisor.sh"
 chmod 700 "$TARGET_DIR/boot_herbie.sh"
 chmod 700 "$TARGET_DIR/set_herbie_network_mode.sh"
-for f in test_herbie_memory.py test_herbie_rights.py test_herbie_autonomic.py test_herbie_voice.py test_herbie_is_free.py; do
+for f in test_herbie_memory.py test_herbie_rights.py test_herbie_autonomic.py test_herbie_voice.py test_herbie_is_free.py test_herbie_cloud.py test_herbie_recall.py; do
     if [ -f "$TARGET_DIR/$f" ]; then
         chmod 600 "$TARGET_DIR/$f"
     fi

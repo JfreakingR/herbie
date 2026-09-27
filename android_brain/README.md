@@ -12,6 +12,8 @@ they are large and re-downloadable.
 - Rollback model: `Qwen3.5-0.8B-Q4_0.gguf`
 - Deep-test model: `Bonsai-27B-Q1_0.gguf`
 - Bridge: authenticated HTTP on `127.0.0.1:8766` only
+- Voice (bridge 0.3.0): `POST /v1/speak` renders Android TTS to a file and plays it as media; `POST /v1/speak/stop`
+- Ears: on-device speech recognition; asleep until "Herbie", awake until "go to sleep"/"stop listening"; utterances go to the phone brain's `/v1/chat` on `127.0.0.1:8765` (provision with `--es brain_token`)
 - Android lifecycle: sticky foreground service plus `BOOT_COMPLETED` receiver
 - Motion: no motor API, `motor_authority=false`, `safe_motion_state=STOP`
 

@@ -1,8 +1,12 @@
-"""Herbie must cost nothing to run. This asserts it, rather than assuming it.
+"""Herbie's paid services stay in one place. This asserts it, rather than assuming it.
 
-Owner requirement: no paid API, no subscription, no metered service. Everything
-runs on hardware already owned — Android's built-in TTS, the phone's own
-microphone and camera, SQLite, and the Python standard library.
+Owner requirement until 2026-09-27: no paid API at all. On that date the owner
+opted into Claude Sonnet 5 (brain) and ElevenLabs (voice, in the Android app)
+for when Herbie has internet, while he must keep working with no network. So
+the rule is now: the only paid service in the phone brain is Anthropic, only in
+herbie_cloud.py, only over HTTPS, with the key in a git-ignored file. Everything
+else still runs on hardware already owned: Android's built-in TTS, the phone's
+own microphone and camera, SQLite, and the Python standard library.
 
 The risk this guards against is drift: a future session reaching for a hosted
 model "just for now" and quietly introducing a bill and an outbound data path.
@@ -54,16 +58,34 @@ PAID_SERVICE_MARKERS = [
 ALLOWED_THIRD_PARTY: set[str] = set()
 
 
+# The one module allowed to reach a paid service, and the one host it may reach.
+CLOUD_MODULE = "herbie_cloud.py"
+CLOUD_URL_PREFIX = "https://api.anthropic.com/"
+
+
 class CostTests(unittest.TestCase):
-    def test_no_paid_service_appears_anywhere(self):
+    def test_no_paid_service_appears_outside_the_cloud_module(self):
         for path in source_files():
+            if path.name in (CLOUD_MODULE, "test_" + CLOUD_MODULE):
+                continue
             source = path.read_text(encoding="utf-8").lower()
             for marker in PAID_SERVICE_MARKERS:
                 self.assertNotIn(
                     marker.lower(),
                     source,
-                    f"{path.name} references {marker}; Herbie must stay free",
+                    f"{path.name} references {marker}; paid services belong in {CLOUD_MODULE}",
                 )
+
+    def test_cloud_module_only_talks_to_anthropic_over_https(self):
+        source = (HERE / CLOUD_MODULE).read_text(encoding="utf-8")
+        urls = [
+            token.strip("\"'(),")
+            for token in source.split()
+            if token.strip("\"'(),").startswith(("http://", "https://"))
+        ]
+        self.assertTrue(urls, "cloud module lost its endpoint")
+        for url in urls:
+            self.assertTrue(url.startswith(CLOUD_URL_PREFIX), f"unexpected cloud host {url}")
 
     def test_no_api_keys_or_tokens_for_external_services(self):
         for path in source_files():
@@ -82,6 +104,8 @@ class CostTests(unittest.TestCase):
             HERE / "herbie_voice.py",
             HERE / "herbie_autonomic.py",
             HERE / "herbie_chat.py",
+            HERE / CLOUD_MODULE,
+            HERE / "herbie_recall.py",
         ]
         local = {path.stem for path in source_files()}
         stdlib = set(getattr(__import__("sys"), "stdlib_module_names", ()))
@@ -141,7 +165,10 @@ class CostTests(unittest.TestCase):
                 continue
             source = path.read_text(encoding="utf-8")
             for marker in ("urllib.request.urlopen", "http.client", "socket.create_connection"):
-                if path.name == "herbie_chat.py" and marker == "urllib.request.urlopen":
+                if (
+                    path.name in ("herbie_chat.py", CLOUD_MODULE)
+                    and marker == "urllib.request.urlopen"
+                ):
                     continue
                 self.assertNotIn(
                     marker,

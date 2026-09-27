@@ -217,7 +217,19 @@ class MainActivity : AppCompatActivity() {
             }.getOrNull()
         }
 
+    /** Herbie's phone-brain API token, so his ears can pass on what they hear. */
+    private fun saveBrainToken(intent: Intent) {
+        val edit = getSharedPreferences(BRIDGE_PREFERENCES, MODE_PRIVATE).edit()
+        // The brain token, plus ElevenLabs settings from Set-Herbie-Cloud-Keys.ps1.
+        for (name in listOf(EXTRA_BRAIN_TOKEN, EXTRA_ELEVENLABS_KEY, EXTRA_ELEVENLABS_VOICE)) {
+            intent.getStringExtra(name)?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { edit.putString(name, it) }
+        }
+        edit.apply()
+    }
+
     private fun decodeBridgeToken(intent: Intent): String? {
+        saveBrainToken(intent)
         val supplied = intent.getStringExtra(EXTRA_BRIDGE_TOKEN)
             ?.trim()
             ?.takeIf { it.length >= 16 }
@@ -374,6 +386,9 @@ class MainActivity : AppCompatActivity() {
         private const val FILE_EXTENSION_GGUF = ".gguf"
         private const val EXTRA_PROMPT_BASE64 = "prompt_b64"
         private const val EXTRA_BRIDGE_TOKEN = "bridge_token"
+        private const val EXTRA_BRAIN_TOKEN = "brain_token"
+        private const val EXTRA_ELEVENLABS_KEY = "elevenlabs_key"
+        private const val EXTRA_ELEVENLABS_VOICE = "elevenlabs_voice"
         private const val BRIDGE_PREFERENCES = "herbie_private_bridge"
     }
 }

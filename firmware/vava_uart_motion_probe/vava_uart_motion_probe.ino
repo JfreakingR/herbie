@@ -9,11 +9,13 @@ HardwareSerial controller(2);
 constexpr int REPLY_RX_PIN = 34;
 constexpr int COMMAND_TX_PIN = 17;
 constexpr uint32_t UART_BAUD = 115200;
-// From herbie_vava_protocol.move("forward", 500, 0x48), with the wire pad.
-// 0x22 = CONTROL_SERVO; servo 1, action 4, duration 0x01F4 little-endian.
+// From herbie_vava_protocol.move("forward", 500, 0x50), with the wire pad.
+// 0x22 = CONTROL_SERVO; servo 1, action 3, duration 0x01F4 little-endian.
+// Action 3, not the factory 4: the track motor plugs were swapped on
+// 2026-09-26, so factory "backward" now drives Herbie forward.
 constexpr uint8_t DRIVE_FRAME[] = {
-    0x00, 0xAA, 0x55, 0x00, 0x07, 0x22, 0x48, 0x01, 0x04, 0xF4, 0x01, 0x62};
-static_assert((0xAA ^ 0x55 ^ 0x00 ^ 0x07 ^ 0x22 ^ 0x48 ^ 0x01 ^ 0x04 ^ 0xF4 ^ 0x01) == 0x62,
+    0x00, 0xAA, 0x55, 0x00, 0x07, 0x22, 0x50, 0x01, 0x03, 0xF4, 0x01, 0x7D};
+static_assert((0xAA ^ 0x55 ^ 0x00 ^ 0x07 ^ 0x22 ^ 0x50 ^ 0x01 ^ 0x03 ^ 0xF4 ^ 0x01) == 0x7D,
               "drive frame checksum mismatch");
 
 char input[12] = {};
@@ -85,7 +87,7 @@ void sendDrive() {
   controller.flush();
   txActive = true;
   releaseTxAt = millis() + 1500;
-  Serial.println("DRIVE_SENT_ONCE: forward 500 ms seq 0x48");
+  Serial.println("DRIVE_SENT_ONCE: forward 500 ms seq 0x50");
 }
 
 void setup() {

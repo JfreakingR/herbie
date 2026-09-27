@@ -9,3 +9,5 @@ At startup GPIO17 is an input. The only accepted USB command is `QUERY` followed
 2026-09-20 isolated loopback check: with Herbie disconnected and GPIO17 jumpered directly to GPIO34, the ESP32 printed `FRAME VALID: AA 55 00 03 26 01 DB`. This proves the query is transmitted and captured on the chosen ESP32 pins. The earlier probe version closed the UART too soon and discarded received bytes; its no-reply result should not be used as evidence about Herbie's STM32.
 
 This is a non-motion communication check. It does not establish motor safety, battery suitability, or permission to drive.
+
+2026-09-27, with the blue Android board **still installed and running**: J21 `RX` moved from GPIO35 to GPIO17, no series resistor. One `QUERY` returned our own frame mirrored on J21 `TX`, then a checksum-valid board-version reply (firmware `1.2` dated `20190527`, `1.2` dated `20181224`). The STM32 accepts J21 input while the Android board is present. The `gpio_pullup_en` error at send time is the sketch asking for a pull-up on input-only GPIO34 and is harmless.

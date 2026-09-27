@@ -27,6 +27,10 @@ MAX_BODY_BYTES = 32_768
 MAX_PROMPT_CHARS = 8_000
 MAX_OUTPUT_TOKENS = 256
 INFERENCE_LOCK = threading.Lock()
+WARMING_LOCK = threading.Lock()
+# How long Ollama keeps the model in VRAM after the last reply. Short enough to
+# hand the GTX 1070 Ti back for games; a cold model is warmed in the background.
+KEEP_ALIVE = "30m"
 
 
 def token_path() -> Path:
@@ -69,6 +73,44 @@ def validate_chat_request(payload: dict[str, Any]) -> tuple[str, str, int]:
     return message.strip(), context.strip(), max_tokens
 
 
+def model_is_loaded(model: str, endpoint: str = DEFAULT_OLLAMA) -> bool:
+    """True when Ollama already holds the model in memory (GET /api/ps).
+
+    If Ollama cannot be asked, report loaded and let the chat call fail on its own.
+    """
+    try:
+        with urllib.request.urlopen(endpoint.rstrip("/") + "/api/ps", timeout=3.0) as response:
+            running = json.loads(response.read()).get("models", [])
+    except (OSError, ValueError, urllib.error.URLError):
+        return True
+    return any(entry.get("name") == model or entry.get("model") == model for entry in running)
+
+
+def warm_model(model: str, endpoint: str = DEFAULT_OLLAMA) -> bool:
+    """Load the model in the background; False if a warm-up is already running."""
+    if not WARMING_LOCK.acquire(blocking=False):
+        return False
+
+    def load() -> None:
+        try:
+            body = json.dumps({"model": model, "keep_alive": KEEP_ALIVE}).encode("utf-8")
+            request = urllib.request.Request(
+                endpoint.rstrip("/") + "/api/generate",
+                data=body,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=180.0) as response:
+                response.read()
+        except (OSError, urllib.error.URLError):
+            pass
+        finally:
+            WARMING_LOCK.release()
+
+    threading.Thread(target=load, name="herbie-model-warmup", daemon=True).start()
+    return True
+
+
 def ollama_chat(
     message: str,
     context: str,
@@ -102,7 +144,7 @@ def ollama_chat(
                 "num_predict": max_tokens,
                 "temperature": 0.7,
             },
-            "keep_alive": "10m",
+            "keep_alive": KEEP_ALIVE,
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -193,6 +235,12 @@ class BrainHandler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             message, context, max_tokens = validate_chat_request(payload)
+            if not model_is_loaded(self.server.model, self.server.ollama_endpoint):
+                # A cold load takes ~20 s. Answer at once so the phone brain uses
+                # its own model for this turn, and be warm for the next one.
+                warm_model(self.server.model, self.server.ollama_endpoint)
+                self.send_json(503, {"error": "model_warming"})
+                return
             answer = ollama_chat(
                 message,
                 context,

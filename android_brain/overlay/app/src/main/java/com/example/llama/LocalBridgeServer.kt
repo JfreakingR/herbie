@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 class LocalBridgeServer(
     private val engine: InferenceEngine,
     private val inferenceMutex: Mutex,
+    private val voice: HerbieVoice,
+    private val ears: () -> HerbieEars?,
     private val token: String,
     private val modelName: String,
 ) {
@@ -88,16 +90,22 @@ class LocalBridgeServer(
                         .put("version", VERSION)
                         .put("ready", true)
                         .put("model", modelName)
+                        .put("voice_ready", voice.isReady)
+                        .put("ears", ears()?.state?.name?.lowercase() ?: "off")
+                        .put("ears_recognizer", ears()?.mode ?: "none")
                         .put("local_only", true)
                         .put("motor_authority", false)
                         .put("safe_motion_state", "STOP")
                     return writeJson(socket, 200, body)
                 }
-                if (method != "POST" || path != "/v1/chat") {
+                if (method != "POST" || path !in POST_PATHS) {
                     return writeJson(socket, 404, error("not_found"))
                 }
                 if (headers["authorization"] != "Bearer $token") {
                     return writeJson(socket, 401, error("unauthorized"))
+                }
+                if (path == "/v1/speak/stop") {
+                    return writeJson(socket, 200, safe(JSONObject().put("stopped", voice.stop())))
                 }
                 val length = headers["content-length"]?.toIntOrNull() ?: 0
                 if (length !in 1..MAX_BODY_BYTES) {
@@ -106,6 +114,7 @@ class LocalBridgeServer(
                 val bytes = ByteArray(length)
                 input.readFully(bytes)
                 val request = JSONObject(String(bytes, StandardCharsets.UTF_8))
+                if (path == "/v1/speak") return speak(socket, request)
                 val message = request.optString("message", "").trim()
                 val context = request.optString("context", "").trim()
                 val maxTokens = request.optInt("max_tokens", 96)
@@ -152,6 +161,27 @@ class LocalBridgeServer(
         }
     }
 
+    /** Speaks one utterance and answers once it has finished playing. */
+    private fun speak(socket: Socket, request: JSONObject) {
+        val text = request.optString("text", "").trim()
+        val pitch = request.optDouble("pitch", 1.0)
+        val rate = request.optDouble("rate", 1.0)
+        if (text.isEmpty() || text.length > MAX_SPEECH_CHARS) {
+            return writeJson(socket, 400, error("invalid_speech_text"))
+        }
+        if (pitch !in 0.5..2.0 || rate !in 0.5..2.0) {
+            return writeJson(socket, 400, error("invalid_prosody"))
+        }
+        if (!voice.isReady) return writeJson(socket, 503, error("voice_unavailable"))
+        val finished = voice.speak(text, pitch.toFloat(), rate.toFloat())
+        writeJson(socket, 200, safe(JSONObject().put("spoken", finished)))
+    }
+
+    private fun safe(body: JSONObject) = body
+        .put("local_only", true)
+        .put("motor_authority", false)
+        .put("safe_motion_state", "STOP")
+
     private fun error(value: String) = JSONObject().put("error", value)
 
     private fun writeJson(socket: Socket, status: Int, body: JSONObject) {
@@ -181,11 +211,13 @@ class LocalBridgeServer(
     companion object {
         private const val HOST = "127.0.0.1"
         private const val PORT = 8766
-        private const val VERSION = "0.2.0"
+        private const val VERSION = "0.3.0"
         private const val TAG = "HerbieModelBridge"
         private const val MAX_BODY_BYTES = 32_768
         private const val MAX_MESSAGE_CHARS = 4_000
         private const val MAX_CONTEXT_CHARS = 8_000
         private const val MAX_OUTPUT_TOKENS = 128
+        private const val MAX_SPEECH_CHARS = 1_000
+        private val POST_PATHS = setOf("/v1/chat", "/v1/speak", "/v1/speak/stop")
     }
 }

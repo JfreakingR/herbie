@@ -41,6 +41,33 @@ class PCBrainTests(unittest.TestCase):
         self.assertFalse(result["motor_authority"])
         self.assertEqual(result["safe_motion_state"], "STOP")
 
+    def _ps(self, names):
+        response = mock.MagicMock()
+        response.read.return_value = json.dumps(
+            {"models": [{"name": n, "model": n} for n in names]}
+        ).encode()
+        response.__enter__.return_value = response
+        return response
+
+    def test_loaded_model_is_detected(self):
+        with mock.patch("urllib.request.urlopen", return_value=self._ps(["qwen3.5:9b"])):
+            self.assertTrue(brain.model_is_loaded("qwen3.5:9b"))
+        with mock.patch("urllib.request.urlopen", return_value=self._ps([])):
+            self.assertFalse(brain.model_is_loaded("qwen3.5:9b"))
+
+    def test_unreachable_ollama_does_not_claim_cold(self):
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("down")):
+            self.assertTrue(brain.model_is_loaded("qwen3.5:9b"))
+
+    def test_only_one_warm_up_runs_at_a_time(self):
+        started = []
+        with mock.patch("threading.Thread") as thread:
+            thread.return_value.start.side_effect = lambda: started.append(1)
+            self.assertTrue(brain.warm_model("qwen3.5:9b"))
+            self.assertFalse(brain.warm_model("qwen3.5:9b"))
+        brain.WARMING_LOCK.release()
+        self.assertEqual(len(started), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

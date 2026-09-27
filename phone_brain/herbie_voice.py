@@ -1,7 +1,9 @@
 """Herbie's voice: free, local, and shaped by how he currently feels.
 
-Speech goes through Android's own TTS engine via `termux-tts-speak`. That is
-already on the phone, costs nothing, needs no account, and never leaves the
+Speech goes through Android's own TTS engine, played by Herbie's bridge app
+(`/v1/speak`), with `termux-tts-speak` as the fallback when the bridge is not
+provisioned. Termux:API's TTS hung on this phone on 2026-09-27. Either way it
+is already on the phone, costs nothing, needs no account, and never leaves the
 device. No API key exists anywhere in this project and none is required.
 
 What makes a voice sound alive is not fidelity, it is variation:
@@ -31,6 +33,7 @@ import threading
 import time
 from typing import Any
 
+import herbie_chat
 import herbie_memory
 
 
@@ -133,6 +136,12 @@ def stop() -> dict[str, Any]:
                 stopped = True
             except OSError:
                 pass
+    if _bridge_available():
+        try:
+            result = herbie_chat.post_bridge_voice("/v1/speak/stop", {}, timeout=5.0)
+            stopped = stopped or result.get("stopped") is True
+        except herbie_chat.ChatUnavailable:
+            pass
     try:
         herbie_memory.set_expression({"speaking": False})
     except ValueError:
@@ -140,8 +149,27 @@ def stop() -> dict[str, Any]:
     return {"stopped": stopped, "motor_authority": False, "safe_motion_state": "STOP"}
 
 
+def _bridge_available() -> bool:
+    try:
+        herbie_chat.load_bridge_token()
+    except herbie_chat.ChatUnavailable:
+        return False
+    return True
+
+
+def _speak_on_bridge(text: str, pitch: float, rate: float) -> bool:
+    try:
+        result = herbie_chat.post_bridge_voice(
+            "/v1/speak", {"text": text, "pitch": pitch, "rate": rate}, timeout=150.0
+        )
+    except herbie_chat.ChatUnavailable:
+        return False
+    return result.get("spoken") is True
+
+
 def _speak_worker(
-    text: str, pitch: float, rate: float, expression: str, latency: float
+    text: str, pitch: float, rate: float, expression: str, latency: float,
+    use_bridge: bool = False,
 ) -> None:
     global _CURRENT
     with VOICE_LOCK:
@@ -156,6 +184,10 @@ def _speak_worker(
         except ValueError:
             pass
         try:
+            if use_bridge and _speak_on_bridge(text, pitch, rate):
+                return
+            if shutil.which("termux-tts-speak") is None:
+                return
             process = subprocess.Popen(
                 [
                     "termux-tts-speak",
@@ -211,12 +243,13 @@ def speak(request: dict[str, Any]) -> dict[str, Any]:
         spoken = add_imperfection(spoken, params["arousal"])
         latency = params["latency_seconds"]
 
-    if shutil.which("termux-tts-speak") is None:
+    use_bridge = _bridge_available()
+    if not use_bridge and shutil.which("termux-tts-speak") is None:
         raise RuntimeError("tts_unavailable")
 
     threading.Thread(
         target=_speak_worker,
-        args=(spoken, float(pitch), float(rate), expression, latency),
+        args=(spoken, float(pitch), float(rate), expression, latency, use_bridge),
         daemon=True,
     ).start()
 

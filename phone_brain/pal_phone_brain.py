@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import herbie_autonomic
 import herbie_chat
+import herbie_recall
 import herbie_memory
 import herbie_voice
 
@@ -61,7 +62,8 @@ MAX_BODY_BYTES = 16_384
 STARTED_AT = time.monotonic()
 STATE_LOCK = threading.Lock()
 CONVERSATION_LOCK = threading.Lock()
-RECENT_DIALOGUE: deque[dict[str, str]] = deque(maxlen=12)
+# Saved to disk by herbie_recall so a restart does not wipe what was just said.
+RECENT_DIALOGUE: deque[dict[str, str]] = deque(herbie_recall.load_dialogue(), maxlen=12)
 STATE: dict[str, Any] = {
     "heartbeat_count": 0,
     "last_heartbeat_monotonic": None,
@@ -354,10 +356,8 @@ class PalHandler(BaseHTTPRequestHandler):
             with STATE_LOCK:
                 computer_url = STATE["primary_inference_url"]
             identity = herbie_memory.self_snapshot()
-            relevant_memories = herbie_memory.recent(
-                2,
-                request.get("message", "")[:500],
-                "relevance",
+            relevant_memories = herbie_recall.context_memories(
+                str(request.get("message", ""))
             )
             with CONVERSATION_LOCK:
                 recent_dialogue = list(RECENT_DIALOGUE)[-6:]
@@ -370,10 +370,8 @@ class PalHandler(BaseHTTPRequestHandler):
                 f"Personality: {trait_text}.",
             ]
             if relevant_memories:
-                context_lines.append("Relevant long-term memory:")
-                context_lines.extend(
-                    f"- {memory['content'][:300]}" for memory in relevant_memories
-                )
+                context_lines.append("What you remember (long-term memory):")
+                context_lines.extend(f"- {memory}" for memory in relevant_memories)
             if recent_dialogue:
                 context_lines.append("Recent conversation:")
                 context_lines.extend(
@@ -402,6 +400,10 @@ class PalHandler(BaseHTTPRequestHandler):
                 RECENT_DIALOGUE.append(
                     {"role": "assistant", "content": response["text"].strip()}
                 )
+                herbie_recall.save_dialogue(list(RECENT_DIALOGUE))
+            herbie_recall.learn_in_background(
+                request["message"].strip(), response["text"].strip()
+            )
             herbie_autonomic.note_interaction()
         elif self.path == "/v1/remember":
             try:

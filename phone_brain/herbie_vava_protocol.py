@@ -293,8 +293,8 @@ def move(direction: str, duration_ms: int, sequence: int) -> bytes:
     point before bytes reach a motor board.
 
     Physically confirmed on 2026-09-26, on the 16.8 V adapter with no battery:
-    "forward" (action 3 since the motor plugs were swapped) and "left" both
-    moved him the named way.
+    all four directions moved him the named way - "forward" (action 3 since
+    the motor plugs were swapped), "backward" (action 4), "left" and "right".
     """
     if direction not in DRIVE_ACTIONS:
         raise ValueError("invalid_direction")

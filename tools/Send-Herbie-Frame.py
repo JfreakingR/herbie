@@ -30,7 +30,9 @@ Usage:
                  reverse found; the wheel is treated as one-way.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
-                 Only `forward` is physically confirmed as of 2026-09-19.
+                 All four physically confirmed on 2026-09-26 after the
+                 motor re-plug (forward 0x4D, left 0x4B, right 0x4E,
+                 backward 0x4F).
     duration_ms  1..2000, capped by the protocol module
     sequence     0x01..0xFF; omit for a time-derived one. NEVER 0.
 

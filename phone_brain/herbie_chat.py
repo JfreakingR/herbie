@@ -1,4 +1,4 @@
-"""Route one bounded Herbie reply to the PC or the on-phone model bridge."""
+"""Route one bounded Herbie reply: cloud first, then the PC, then the phone model."""
 
 from __future__ import annotations
 
@@ -12,11 +12,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import herbie_cloud
+
 
 PHONE_BRIDGE_URL = "http://127.0.0.1:8766"
 MAX_MESSAGE_CHARS = 4_000
 MAX_CONTEXT_CHARS = 8_000
 MAX_OUTPUT_TOKENS = 256
+PHONE_CONTEXT_CHARS = 2_000
 
 
 class ChatUnavailable(RuntimeError):
@@ -113,6 +116,33 @@ def post_local_chat(
     return result
 
 
+def post_bridge_voice(path: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    """Ask the on-phone bridge app to speak (/v1/speak) or hush (/v1/speak/stop).
+
+    The bridge owns Android's TTS because Termux:API's hung on this phone. It
+    answers /v1/speak once the utterance has finished playing.
+    """
+    if path not in ("/v1/speak", "/v1/speak/stop"):
+        raise ValueError("invalid_voice_path")
+    request = urllib.request.Request(
+        PHONE_BRIDGE_URL + path,
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {load_bridge_token()}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            result = json.loads(response.read())
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        raise ChatUnavailable(str(exc)) from exc
+    if not isinstance(result, dict):
+        raise ChatUnavailable("model_bridge_returned_no_result")
+    return result
+
+
 def wait_for_phone_bridge(timeout: float = 20.0) -> bool:
     """Allow Android to restore the sticky foreground model service after pressure."""
     deadline = time.monotonic() + timeout
@@ -138,6 +168,12 @@ def route_chat(
 ) -> dict[str, Any]:
     message, max_tokens = validate_request(payload)
     primary_error = None
+    # Cloud first when provisioned and online; any failure or refusal falls
+    # through, so Herbie keeps talking with no network.
+    try:
+        return herbie_cloud.chat(message, context, max_tokens)
+    except herbie_cloud.CloudUnavailable:
+        pass
     if computer_available and computer_url:
         try:
             return post_local_chat(
@@ -157,7 +193,8 @@ def route_chat(
             PHONE_BRIDGE_URL,
             load_bridge_token(),
             message,
-            "",
+            # Enough memory for the small offline model without slowing it much.
+            context[:PHONE_CONTEXT_CHARS],
             min(max_tokens, 128),
             timeout=300.0,
         )
