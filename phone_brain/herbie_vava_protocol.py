@@ -176,6 +176,26 @@ HEAD_ACTIONS = {"rise": 1, "bow": 2}
 PANTILT_LASER_PEN = 1
 PANTILT_CAT_WHIP = 2
 
+# TOGGLE_PERIPHERAL (0x21): {byte number, byte action, short duration}. Unlike
+# the servo value, Terminal.transferToSerialStr passes `duration` through
+# LBE.swap16, so it goes out big-endian. Peripheral numbers are TermSegoValue's.
+#
+# The treat wheel on top of the head is the "snack lattices" (peripheral 4).
+# The factory self-test (SelfCheckTask, "Test snack lattices") turns it with
+# exactly `toggle_peripheral,0,0,4,1,0`, then reads peripheral status to see
+# that it moved. The app's scheduled feed (BoardConfigManager.onTimer) instead
+# sends `toggle_peripheral,0,0,7,<portions>,0` - peripheral 7, instant_feeding.
+PERIPHERAL_FEEDING_TRAY = 3
+PERIPHERAL_SNACK_LATTICES = 4
+PERIPHERAL_INSTANT_FEEDING = 7
+PERIPHERAL_NAMES = {1: "laser_pen", 2: "bubble_machine", 3: "feeding_tray",
+                    4: "snack_lattices", 5: "ball_launcher", 6: "led",
+                    7: "instant_feeding", 8: "instant_launching",
+                    9: "computer_power_click", 11: "infrared_led",
+                    12: "collision_avoidance", 22: "bucket", 33: "balance"}
+TREAT_WHEEL_STEP = 1          # action the self-test sends to peripheral 4
+MAX_FEED_PORTIONS = 3         # cap on instant_feeding portions per frame
+
 # The drive cap is deliberately short: this is the last point before bytes reach
 # a motor board. The head cap matches the factory self-test's 7000 ms.
 MAX_DURATION_MS = 2000
@@ -272,6 +292,37 @@ def head(motion: str, duration_ms: int, sequence: int) -> bytes:
     return control_servo(SERVO_HEAD, HEAD_ACTIONS[motion], duration_ms, sequence)
 
 
+def toggle_peripheral(number: int, action: int, duration: int, sequence: int) -> bytes:
+    """A TOGGLE_PERIPHERAL (0x21) frame: {byte number, byte action, short duration}.
+
+    `duration` goes out big-endian - the factory app swaps it with LBE.swap16,
+    the opposite of CONTROL_SERVO. Prefer treat_wheel()/feed(); this is raw.
+    """
+    for name, byte in (("number", number), ("action", action)):
+        if isinstance(byte, bool) or not isinstance(byte, int) or not 0 <= byte <= 0xFF:
+            raise ValueError(f"invalid_{name}")
+    if isinstance(duration, bool) or not isinstance(duration, int) or not 0 <= duration <= 0xFFFF:
+        raise ValueError("invalid_duration")
+    payload = bytes([number, action]) + duration.to_bytes(2, "big")
+    return build_frame(CMD_TOGGLE_PERIPHERAL, sequence, payload)
+
+
+def treat_wheel(sequence: int) -> bytes:
+    """Turn the treat wheel one step: the factory self-test's own command.
+
+    `toggle_peripheral,0,0,4,1,0` -> peripheral 4 (snack_lattices), action 1,
+    duration 0. Not yet physically confirmed on Herbie.
+    """
+    return toggle_peripheral(PERIPHERAL_SNACK_LATTICES, TREAT_WHEEL_STEP, 0, sequence)
+
+
+def feed(portions: int, sequence: int) -> bytes:
+    """Dispense like the app's feed schedule: peripheral 7, action = portions."""
+    if isinstance(portions, bool) or not isinstance(portions, int) or not 1 <= portions <= MAX_FEED_PORTIONS:
+        raise ValueError("invalid_portions")
+    return toggle_peripheral(PERIPHERAL_INSTANT_FEEDING, portions, 0, sequence)
+
+
 def parse_general_response(frame: dict[str, Any]) -> dict[str, int] | None:
     """Decode a serial GENERAL_RESPONSE (0x01): which of OUR frames it answers.
 
@@ -348,6 +399,10 @@ def describe(frame: dict[str, Any]) -> str:
             motion = {v: k for k, v in HEAD_ACTIONS.items()}.get(payload[1], f"action {payload[1]}")
             return f"head {motion} {value} ms"
         return f"servo {payload[0]} action {payload[1]} value {value}"
+    if frame["command"] == CMD_TOGGLE_PERIPHERAL and len(payload) >= 4:
+        part = PERIPHERAL_NAMES.get(payload[0], f"peripheral {payload[0]}")
+        duration = int.from_bytes(payload[2:4], "big")
+        return f"toggle {part} action {payload[1]} duration {duration}"
     if frame["command"] == CMD_CONTROL_PANTILT and len(payload) >= 2:
         part = {PANTILT_LASER_PEN: "laser pen", PANTILT_CAT_WHIP: "cat whip"}.get(
             payload[0], f"pantilt {payload[0]}")

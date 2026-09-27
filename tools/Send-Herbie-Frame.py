@@ -7,6 +7,13 @@ no attempt. See HERBIE_HANDOFF_2026-09-18_SEQUENCE_AND_IR.md.
 
 Usage:
     python tools/Send-Herbie-Frame.py <direction> <duration_ms> [sequence]
+    python tools/Send-Herbie-Frame.py treat [sequence]
+    python tools/Send-Herbie-Frame.py feed <portions> [sequence]
+
+    treat        turn the treat wheel one step - the factory self-test's own
+                 `toggle_peripheral,0,0,4,1,0` (peripheral 4, snack_lattices)
+    feed         the app's scheduled-feed command instead: peripheral 7,
+                 instant_feeding, 1..3 portions. Try `treat` first.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
                  Only `forward` is physically confirmed as of 2026-09-19.
@@ -114,12 +121,13 @@ def uart_lines(target, count=6):
 
 
 def main(argv):
-    if not 3 <= len(argv) <= 4:
+    verb = argv[1] if len(argv) > 1 else ""
+    nargs = {"treat": 0, "feed": 1}.get(verb, 1)   # args before [sequence]
+    if not 2 + nargs <= len(argv) <= 3 + nargs:
         print(__doc__)
         return 2
-    direction = argv[1]
-    duration_ms = int(argv[2])
-    sequence = int(argv[3], 0) if len(argv) > 3 else (int(time.time()) & 0xFF)
+    seq_arg = argv[2 + nargs] if len(argv) > 2 + nargs else None
+    sequence = int(seq_arg, 0) if seq_arg else (int(time.time()) & 0xFF)
     if sequence == 0:
         # Not an error the board reports; it is simply ignored. Refusing to
         # send it is the entire point of this script.
@@ -132,12 +140,20 @@ def main(argv):
         return 1
 
     try:
-        frame = vava.to_wire(vava.move(direction, duration_ms, sequence))
+        if verb == "treat":
+            frame = vava.treat_wheel(sequence)
+        elif verb == "feed":
+            frame = vava.feed(int(argv[2]), sequence)
+        else:
+            frame = vava.move(verb, int(argv[2]), sequence)
+        frame = vava.to_wire(frame)
     except ValueError as exc:
         print(f"{exc} - directions: {', '.join(sorted(vava.DRIVE_ACTIONS))}; "
-              f"duration 1..{vava.MAX_DURATION_MS} ms")
+              f"duration 1..{vava.MAX_DURATION_MS} ms; "
+              f"feed portions 1..{vava.MAX_FEED_PORTIONS}")
         return 2
     print(f"target {target}  seq 0x{sequence:02X}  {frame.hex(' ').upper()}")
+    print("   ", vava.describe(vava.parse_frame(frame)))
 
     local = os.path.join(REPO, "tools", ".frame.bin")
     with open(local, "wb") as fh:

@@ -215,6 +215,31 @@ class BenchCaptures20260916(unittest.TestCase):
         self.assertIsNone(vava.parse_general_response(None))
 
 
+class TreatWheelTests(unittest.TestCase):
+    """The treat wheel is TOGGLE_PERIPHERAL (0x21), from SelfCheckTask."""
+
+    def test_treat_wheel_is_the_self_tests_snack_lattices_command(self):
+        # toggle_peripheral,0,0,4,1,0 -> peripheral 4, action 1, duration 0.
+        self.assertEqual(vava.treat_wheel(0x49).hex(" ").upper(),
+                         "AA 55 00 07 21 49 04 01 00 00 95")
+
+    def test_toggle_duration_is_big_endian(self):
+        # The opposite of CONTROL_SERVO: the app passes it through LBE.swap16.
+        payload = vava.parse_frame(vava.toggle_peripheral(4, 1, 0x0102, 1))["payload"]
+        self.assertEqual(payload, b"\x04\x01\x01\x02")
+
+    def test_feed_is_instant_feeding_with_portions_as_action(self):
+        payload = vava.parse_frame(vava.feed(2, 1))["payload"]
+        self.assertEqual(payload, bytes([vava.PERIPHERAL_INSTANT_FEEDING, 2, 0, 0]))
+        for bad in (0, vava.MAX_FEED_PORTIONS + 1, True, "1"):
+            with self.assertRaisesRegex(ValueError, "invalid_portions"):
+                vava.feed(bad, 1)
+
+    def test_describe_names_the_wheel(self):
+        text = vava.describe(vava.parse_frame(vava.treat_wheel(1)))
+        self.assertEqual(text, "toggle snack_lattices action 1 duration 0")
+
+
 class SafetyTests(unittest.TestCase):
     def test_this_module_only_makes_bytes(self):
         """It must not be able to transmit; sending is a separate decision.
