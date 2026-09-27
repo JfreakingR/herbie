@@ -78,18 +78,34 @@ $apk = Get-ChildItem -LiteralPath (Join-Path $Project 'app\build\outputs\apk\deb
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $apk) { throw 'Build finished but no APK was found.' }
 $target = Join-Path $Release 'HerbieBrain-debug.apk'
-Copy-Item -LiteralPath $apk.FullName -Destination $target -Force
-$hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-[System.IO.File]::WriteAllText((Join-Path $Release 'SHA256.txt'), "$hash  HerbieBrain-debug.apk`n")
-Write-Host "Built $target" -ForegroundColor Green
-Write-Host "SHA256 $hash"
+# The release copy can be locked (an earlier adb install, Explorer's preview,
+# antivirus). That must not stop the install, which uses the build output.
+$saved = $false
+for ($try = 1; $try -le 3 -and -not $saved; $try++) {
+    try {
+        Copy-Item -LiteralPath $apk.FullName -Destination $target -Force
+        $saved = $true
+    } catch {
+        if ($try -lt 3) { Start-Sleep -Seconds 3 }
+    }
+}
+if ($saved) {
+    $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+    [System.IO.File]::WriteAllText((Join-Path $Release 'SHA256.txt'), "$hash  HerbieBrain-debug.apk`n")
+    Write-Host "Built $target" -ForegroundColor Green
+    Write-Host "SHA256 $hash"
+} else {
+    Write-Host "Built $($apk.FullName)" -ForegroundColor Green
+    Write-Host "Could not update $target (the file is in use). Close anything using it and re-run later to save it there; installing from the build output instead." -ForegroundColor Yellow
+}
 
 if (-not $Install) {
     Write-Host 'Not installed. Re-run with -Install to put it on the phone.'
     exit 0
 }
 
-$result = (& $Adb -s $DeviceSerial install -r $target 2>&1) -join "`n"
+$ErrorActionPreference = 'Continue'
+$result = (& $Adb -s $DeviceSerial install -r $apk.FullName 2>&1) -join "`n"
 Write-Host $result
 if ($result -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match') {
     Write-Host ''
@@ -99,7 +115,10 @@ if ($result -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match')
 }
 if ($result -notmatch 'Success') { throw 'Install did not report Success.' }
 
-# Open it so the service (re)starts from the foreground, with the microphone.
+# Camera and microphone, then open it so the service (re)starts from the
+# foreground holding both.
+& $Adb -s $DeviceSerial shell pm grant $Package android.permission.CAMERA 2>$null | Out-Null
+& $Adb -s $DeviceSerial shell pm grant $Package android.permission.RECORD_AUDIO 2>$null | Out-Null
 & $Adb -s $DeviceSerial shell am force-stop $Package | Out-Null
 & $Adb -s $DeviceSerial shell monkey -p $Package -c android.intent.category.LAUNCHER 1 | Out-Null
 Write-Host ''
