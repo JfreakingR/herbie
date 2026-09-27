@@ -85,6 +85,28 @@ class BrainTests(unittest.TestCase):
         self.assertEqual(brain.chat("hi")[0]["error"], "no_brain_token")
 
 
+class ReconnectTests(unittest.TestCase):
+    def test_replugged_phone_is_reconnected(self):
+        galaxy = FakeGalaxy()
+        galaxy.down = True
+        brain = herbie_desk.Brain(herbie_desk.DEFAULT_BRAIN, "", fetch=galaxy)
+        stop = threading.Event()
+        attempts = []
+
+        def connect():
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise RuntimeError("still unplugged")
+            galaxy.down = False
+            stop.set()
+            return "fresh"
+
+        herbie_desk.keep_connected(brain, connect, every=0.01, stop=stop)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(brain.token, "fresh")
+        self.assertTrue(brain.ready())
+
+
 class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

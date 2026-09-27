@@ -244,6 +244,21 @@ def connect_over_adb() -> str:
     return herbie_presence.connect()
 
 
+def keep_connected(brain: Brain, connect: Callable[[], str], every: float = 15.0,
+                   stop: threading.Event | None = None) -> None:
+    """Redo the ADB forward whenever the brain stops answering (phone replugged)."""
+    stop = stop or threading.Event()
+    while not stop.wait(every):
+        if brain.ready():
+            continue
+        try:
+            token = connect()
+        except Exception:  # still unplugged; try again next round
+            continue
+        brain.token = token
+        print("Galaxy brain reconnected.", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--brain", default=DEFAULT_BRAIN,
@@ -258,7 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     token = ""
-    if args.brain == DEFAULT_BRAIN and not args.no_adb:
+    use_adb = args.brain == DEFAULT_BRAIN and not args.no_adb
+    if use_adb:
         try:
             token = connect_over_adb()
         except Exception as exc:  # face still comes up; it just can't think
@@ -269,6 +285,9 @@ def main(argv: list[str] | None = None) -> int:
         token = args.token_file.read_text(encoding="utf-8").strip()
 
     brain = Brain(args.brain, token, voice=args.voice)
+    if use_adb:
+        threading.Thread(target=keep_connected, args=(brain, connect_over_adb),
+                         daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), make_handler(brain))
     print(f"Herbie's desk face: http://{args.host}:{args.port}/face/?kiosk=1", flush=True)
     print(f"Brain: {args.brain} ({'token loaded' if token else 'no token'}), voice: {args.voice}",
