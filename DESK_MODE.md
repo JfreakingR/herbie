@@ -58,12 +58,11 @@ the STM32 UART, or any motor. Tests: `cd desk && python -m unittest -v`.
 
 ## Known gaps
 
-- **Conversations started by voice on the Galaxy don't animate the face yet.**
-  The Herbie Brain app's ears and voice (`HerbieEars.kt`, `HerbieVoice.kt`)
-  speak directly and never set the brain's `listening`/`speaking` flags, so the
-  face can't tell. Fix: have the app `POST /v1/expression` with
-  `listening`/`speaking` around recognition and speech. Typed conversations
-  through the face already animate.
+- **Voice conversations need the rebuilt Herbie Brain app.** `HerbieEars.kt`
+  now posts `listening`/`speaking` to the brain's `/v1/expression` (listening
+  while awake, speaking while he talks), which the face follows. Rebuild and
+  install with `tools/Build-Herbie-Brain.ps1`; until then only typed
+  conversations animate the face.
 - Galaxy-voice lip movement is timed from word count, not the real audio.
 - `Start-Herbie-Desk.ps1` was written without a Windows machine to run it on;
   the Python server and the face were tested at 1024×600 and 1280×800 in Chromium.

@@ -25,6 +25,9 @@ import java.util.concurrent.Executors
  * phone brain (/v1/chat on 127.0.0.1:8765) and the reply is spoken. A sleep
  * phrase puts him back to sleep. He never listens while he is talking, so he
  * does not hear himself.
+ *
+ * He tells the brain's expression state when he is listening (awake) and
+ * speaking, so a face on a screen (desk/herbie_desk.py) can follow along.
  */
 class HerbieEars(
     private val context: Context,
@@ -63,6 +66,7 @@ class HerbieEars(
     fun stop() = main.post {
         running = false
         state = State.OFF
+        worker.execute { showActivity(listening = false, speaking = false) }
         recognizer?.destroy()
         recognizer = null
     }
@@ -121,6 +125,7 @@ class HerbieEars(
             if (at < 0) return
             state = State.AWAKE
             Log.i(TAG, "Woke up")
+            showActivity(listening = true, speaking = false)
             val rest = heard.substring(at + WAKE_WORD.length).trim(' ', ',', '.', '!', '?')
             if (rest.isEmpty()) say("I'm listening.") else converse(rest)
             return
@@ -135,6 +140,8 @@ class HerbieEars(
     }
 
     private fun converse(message: String) {
+        // Not listening while he thinks, so the face drops its listening look.
+        showActivity(listening = false, speaking = false)
         val reply = runCatching { askBrain(message) }
             .onFailure { Log.e(TAG, "Brain unavailable", it) }
             .getOrNull()
@@ -142,7 +149,33 @@ class HerbieEars(
     }
 
     private fun say(text: String) {
-        voice.speak(text.take(MAX_SPEECH_CHARS), 1.0f, 1.0f)
+        showActivity(listening = false, speaking = true)
+        try {
+            voice.speak(text.take(MAX_SPEECH_CHARS), 1.0f, 1.0f)
+        } finally {
+            showActivity(listening = state == State.AWAKE, speaking = false)
+        }
+    }
+
+    /** Best effort: a face that misses one update is better than a mute Herbie. */
+    private fun showActivity(listening: Boolean, speaking: Boolean) {
+        runCatching {
+            val connection = URL(BRAIN_EXPRESSION_URL).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 1_000
+                connection.readTimeout = 2_000
+                connection.doOutput = true
+                connection.setRequestProperty("Authorization", "Bearer $brainToken")
+                connection.setRequestProperty("Content-Type", "application/json")
+                // Privacy mode refuses listening=true; that refusal is correct.
+                val body = JSONObject().put("listening", listening).put("speaking", speaking).toString()
+                connection.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) }
+                connection.responseCode
+            } finally {
+                connection.disconnect()
+            }
+        }.onFailure { Log.w(TAG, "Could not update the face: $it") }
     }
 
     private fun askBrain(message: String): String {
@@ -167,6 +200,7 @@ class HerbieEars(
     companion object {
         private const val TAG = "HerbieEars"
         private const val BRAIN_CHAT_URL = "http://127.0.0.1:8765/v1/chat"
+        private const val BRAIN_EXPRESSION_URL = "http://127.0.0.1:8765/v1/expression"
         private const val WAKE_WORD = "herbie"
         private val SLEEP_PHRASES = listOf("go to sleep", "stop listening")
         private const val RETRY_MS = 1_000L
