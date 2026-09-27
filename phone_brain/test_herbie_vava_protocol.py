@@ -129,8 +129,13 @@ class MovementTests(unittest.TestCase):
                 self.assertEqual(parsed["command"], vava.CMD_CONTROL_SERVO)
                 self.assertEqual(parsed["payload"][0], vava.SERVO_DRIVE)
 
-    def test_directions_match_the_factory_self_test(self):
-        expected = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+    def test_factory_table_matches_the_factory_self_test(self):
+        self.assertEqual(vava.FACTORY_DRIVE_ACTIONS,
+                         {"forward": 4, "backward": 3, "left": 2, "right": 1})
+
+    def test_directions_match_herbies_swapped_motor_plugs(self):
+        # 2026-09-26: straight-line pair reversed, spins unchanged.
+        expected = {"forward": 3, "backward": 4, "left": 2, "right": 1}
         for direction, action in expected.items():
             payload = vava.parse_frame(vava.move(direction, 1000, 1))["payload"]
             self.assertEqual(payload[1], action, direction)
@@ -179,9 +184,13 @@ class BenchCaptures20260916(unittest.TestCase):
     def test_builders_reproduce_every_sent_frame_byte_for_byte(self):
         for name, (kind, motion, ms, seq) in self.SENT.items():
             with self.subTest(name=name):
-                build = vava.move if kind == "move" else vava.head
-                self.assertEqual(vava.to_wire(build(motion, ms, seq)),
-                                 fixture("servo_20260916", name))
+                # These predate the 09-26 plug swap, so they use factory names.
+                if kind == "move":
+                    built = vava.control_servo(vava.SERVO_DRIVE,
+                                               vava.FACTORY_DRIVE_ACTIONS[motion], ms, seq)
+                else:
+                    built = vava.head(motion, ms, seq)
+                self.assertEqual(vava.to_wire(built), fixture("servo_20260916", name))
 
     def test_every_reply_is_an_ok_ack_echoing_our_sequence(self):
         replies = {

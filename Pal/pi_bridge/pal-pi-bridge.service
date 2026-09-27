@@ -1,0 +1,18 @@
+[Unit]
+Description=Pal Raspberry Pi bridge
+After=network.target
+
+[Service]
+Type=simple
+User=jfreakingr
+Group=jfreakingr
+WorkingDirectory=/home/jfreakingr/pal-pi-bridge
+Environment=PAL_PI_HOST=127.0.0.1
+Environment=PAL_PI_PORT=8766
+ExecStart=/usr/bin/python3 /home/jfreakingr/pal-pi-bridge/pal_pi_bridge.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

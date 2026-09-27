@@ -1,0 +1,6 @@
+STARTED=2026-09-05T06:57:00.7666051-04:00
+TARGET_AND_IMAGE_VERIFIED=True
+TARGET_CLEARED=True
+BYTES_WRITTEN=2952790016
+WRITE_COMPLETE_BYTES=2977955840
+FAILED=Cannot convert argument "val2", with value: "2977955840", for "Min" to type "System.Int32": "Cannot convert value "2977955840" to type "System.Int32". Error: "Value was either too large or too small for an Int32.""

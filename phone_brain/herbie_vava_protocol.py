@@ -166,7 +166,12 @@ KEY_ACTION_NAMES = {0: "click", 1: "short_hold", 2: "long_hold",
 #     throws and sends nothing. They are dead code, not a recipe.
 SERVO_DRIVE = 1
 SERVO_HEAD = 2
-DRIVE_ACTIONS = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+FACTORY_DRIVE_ACTIONS = {"forward": 4, "backward": 3, "left": 2, "right": 1}
+# Herbie's left and right track motor plugs were swapped during reassembly on
+# 2026-09-26: action 4 drove him backward while action 2 still spun him left.
+# The harness is too fragile to re-plug, so the owner chose to correct it here.
+# Only the straight-line pair trades; spins are unaffected by that swap.
+DRIVE_ACTIONS = {**FACTORY_DRIVE_ACTIONS, "forward": 3, "backward": 4}
 HEAD_ACTIONS = {"rise": 1, "bow": 2}
 PANTILT_LASER_PEN = 1
 PANTILT_CAT_WHIP = 2
@@ -244,14 +249,14 @@ def _duration(duration_ms: Any, cap: int) -> int:
 
 
 def move(direction: str, duration_ms: int, sequence: int) -> bytes:
-    """Drive the wheels: servo 1, forward 4 / backward 3 / left 2 / right 1.
+    """Drive the wheels: servo 1, directions as Herbie is wired (DRIVE_ACTIONS).
 
     Duration is capped here rather than trusting the caller: this is the last
     point before bytes reach a motor board.
 
-    As of 2026-09-16 the board acks this five times out of five (result 0), but
-    the wheels have not been confirmed to turn. Directions follow the factory
-    naming and are not yet physically confirmed.
+    Physically confirmed on 2026-09-26, on the 16.8 V adapter with no battery:
+    "forward" (action 3 since the motor plugs were swapped) and "left" both
+    moved him the named way.
     """
     if direction not in DRIVE_ACTIONS:
         raise ValueError("invalid_direction")

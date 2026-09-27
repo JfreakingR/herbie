@@ -1,0 +1,17 @@
+[Unit]
+Description=Herbie face kiosk (starts only after a real panel is connected)
+After=pal-pi-bridge.service
+Wants=pal-pi-bridge.service
+
+[Service]
+Type=simple
+User=jfreakingr
+Group=jfreakingr
+WorkingDirectory=/home/jfreakingr/pal-pi-bridge
+ExecStart=/bin/sh /home/jfreakingr/pal-pi-bridge/herbie-face-kiosk.sh
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

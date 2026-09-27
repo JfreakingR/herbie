@@ -72,18 +72,24 @@ def ensure_link(target, attempts=4):
     """
     if ":" not in target:          # USB serial: nothing to reconnect
         return link_ok(target)
+    def quietly(*args, timeout=20):
+        # `adb connect` itself blocks and times out when he is mid-scan, so
+        # every recovery step has to survive its own timeout.
+        try:
+            subprocess.run([ADB, *args], capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            pass
+
     for attempt in range(attempts):
         if link_ok(target):
             return True
-        subprocess.run([ADB, "disconnect", target],
-                       capture_output=True, timeout=15)
-        subprocess.run([ADB, "connect", target],
-                       capture_output=True, timeout=20)
+        quietly("disconnect", target, timeout=15)
+        quietly("connect", target)
         if link_ok(target):
             return True
         if attempt == attempts - 2:   # last resort before giving up
-            subprocess.run([ADB, "kill-server"], capture_output=True, timeout=15)
-            subprocess.run([ADB, "start-server"], capture_output=True, timeout=20)
+            quietly("kill-server", timeout=15)
+            quietly("start-server")
         time.sleep(1.5)
     return link_ok(target)
 

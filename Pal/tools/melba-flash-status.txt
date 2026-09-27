@@ -1,0 +1,4 @@
+STARTED=2026-09-05T06:44:45.0148938-04:00
+IMAGER_STARTED=True
+IMAGER_EXIT_CODE=1
+FAILED=Raspberry Pi Imager failed with exit code 1.

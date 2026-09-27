@@ -1,17 +1,21 @@
-// Pal project: passive VAVA VP-SPR001 UART listener
+// Herbie project: passive two-channel VAVA VP-SPR001 UART listener
 //
 // Wiring (both devices OFF while connecting):
-//   VAVA J21 TX  -> ESP32 GPIO23
+//   VAVA J21 TX  -> ESP32 GPIO34 (replies from the STM32)
+//   VAVA J21 RX  -> ESP32 GPIO35 (commands to the STM32)
 //   VAVA J21 GND -> ESP32 GND
 //
-// Do NOT connect VAVA J21 RX or 3.3V during passive capture.
+// GPIO34 and GPIO35 are input-only on the classic ESP32, so this sketch cannot
+// drive either VAVA signal. Do NOT connect VAVA J21 3.3V or any ESP32 TX pin.
 
 #include <Arduino.h>
 
-HardwareSerial VavaSerial(2);
+HardwareSerial J21TxSerial(1);
+HardwareSerial J21RxSerial(2);
 
-constexpr int VAVA_RX_PIN = 23;
-constexpr int VAVA_TX_UNUSED = -1;
+constexpr int J21_TX_LISTEN_PIN = 34;
+constexpr int J21_RX_LISTEN_PIN = 35;
+constexpr int NO_TX_PIN = -1;
 
 const uint32_t BAUD_RATES[] = {
   115200,
@@ -32,20 +36,26 @@ void selectBaud(size_t index) {
   }
 
   baudIndex = index;
-  VavaSerial.end();
-  pinMode(VAVA_RX_PIN, INPUT);
-  VavaSerial.begin(BAUD_RATES[baudIndex], SERIAL_8N1, VAVA_RX_PIN, VAVA_TX_UNUSED);
+  J21TxSerial.end();
+  J21RxSerial.end();
+  pinMode(J21_TX_LISTEN_PIN, INPUT);
+  pinMode(J21_RX_LISTEN_PIN, INPUT);
+  J21TxSerial.begin(BAUD_RATES[baudIndex], SERIAL_8N1,
+                    J21_TX_LISTEN_PIN, NO_TX_PIN);
+  J21RxSerial.begin(BAUD_RATES[baudIndex], SERIAL_8N1,
+                    J21_RX_LISTEN_PIN, NO_TX_PIN);
 
-  Serial.printf("\nListening on GPIO%d at %lu baud (8N1).\n",
-                VAVA_RX_PIN,
+  Serial.printf("\nListening on GPIO%d (J21 TX) and GPIO%d (J21 RX) at %lu baud (8N1).\n",
+                J21_TX_LISTEN_PIN,
+                J21_RX_LISTEN_PIN,
                 static_cast<unsigned long>(BAUD_RATES[baudIndex]));
   Serial.println("Power-cycle the VAVA now, then watch for byte lines.");
 }
 
 void printMenu() {
   Serial.println();
-  Serial.println("Passive VAVA UART listener");
-  Serial.println("No data is transmitted to the VAVA.");
+  Serial.println("Passive two-channel VAVA UART listener");
+  Serial.println("GPIO34 and GPIO35 are input-only; no data can be transmitted to the VAVA.");
   Serial.println("Choose a baud rate, then power-cycle the VAVA:");
   for (size_t i = 0; i < BAUD_COUNT; ++i) {
     Serial.printf("  %u = %lu baud\n",
@@ -56,7 +66,8 @@ void printMenu() {
 }
 
 void setup() {
-  pinMode(VAVA_RX_PIN, INPUT);
+  pinMode(J21_TX_LISTEN_PIN, INPUT);
+  pinMode(J21_RX_LISTEN_PIN, INPUT);
   Serial.begin(115200);
   delay(1000);
   printMenu();
@@ -73,7 +84,12 @@ void loop() {
     }
   }
 
-  if (VavaSerial.available()) {
+  captureAvailable(J21TxSerial, "J21_TX_REPLY");
+  captureAvailable(J21RxSerial, "J21_RX_COMMAND");
+}
+
+void captureAvailable(HardwareSerial &source, const char *direction) {
+  if (source.available()) {
     Serial.printf("%10lu ms |", static_cast<unsigned long>(millis()));
 
     char ascii[17];
@@ -81,11 +97,11 @@ void loop() {
     const uint32_t start = millis();
 
     while (count < 16 && (millis() - start) < 30) {
-      if (!VavaSerial.available()) {
+      if (!source.available()) {
         continue;
       }
 
-      const uint8_t value = static_cast<uint8_t>(VavaSerial.read());
+      const uint8_t value = static_cast<uint8_t>(source.read());
       Serial.printf(" %02X", value);
       ascii[count] = (value >= 32 && value <= 126) ? static_cast<char>(value) : '.';
       ++count;
@@ -95,6 +111,6 @@ void loop() {
     for (size_t i = count; i < 16; ++i) {
       Serial.print("   ");
     }
-    Serial.printf(" | %s\n", ascii);
+    Serial.printf(" | %s | %s\n", ascii, direction);
   }
 }

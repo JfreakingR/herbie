@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+last-gatt-dump.txt
+last-session.log
+*.pyc

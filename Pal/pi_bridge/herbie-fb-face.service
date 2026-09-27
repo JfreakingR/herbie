@@ -1,0 +1,18 @@
+[Unit]
+Description=Herbie BMO face on HDMI framebuffer
+After=pal-pi-bridge.service
+Wants=pal-pi-bridge.service
+
+[Service]
+Type=simple
+User=jfreakingr
+Group=video
+WorkingDirectory=/home/jfreakingr/pal-pi-bridge
+ExecStartPre=+/bin/sh -c 'for d in /sys/class/vtconsole/vtcon*/bind; do [ -f "$d" ] && echo 0 > "$d" || true; done'
+ExecStart=/usr/bin/python3 /home/jfreakingr/pal-pi-bridge/herbie_fb_face.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

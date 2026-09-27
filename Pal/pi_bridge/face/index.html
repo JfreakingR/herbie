@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <title>Bot Face</title>
+  <style>
+    :root {
+      --lcd: #88c4ae;
+      --ink: #141414;
+      --hl: #ffffff;
+      --dock: rgba(12, 28, 24, 0.72);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--lcd);
+      overflow: hidden;
+      font-family: ui-rounded, "Segoe UI", system-ui, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    #screen {
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+        radial-gradient(ellipse at 50% 42%, #96d0bb 0%, var(--lcd) 62%, #74b49a 100%);
+      background-size: 7px 7px, 7px 7px, 100% 100%;
+    }
+    #screen::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.015) 0 1px,
+        transparent 1px 4px
+      );
+      mix-blend-mode: soft-light;
+    }
+    #face-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #dock {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, var(--dock), transparent);
+      color: #e9fff6;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 5;
+      transform: translateY(calc(100% - 28px));
+      transition: transform 0.28s ease;
+    }
+    #dock.open, #dock:hover { transform: translateY(0); }
+    body.kiosk #dock { display: none; }
+    .grab {
+      align-self: center;
+      width: 48px;
+      height: 4px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.45);
+      margin-bottom: 4px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    button, select {
+      appearance: none;
+      border: 0;
+      background: rgba(255,255,255,0.14);
+      color: #f3fffa;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font: 600 12px/1 ui-rounded, "Segoe UI", system-serif;
+      cursor: pointer;
+    }
+    button:hover, button.active { background: rgba(255,255,255,0.3); }
+    #say {
+      flex: 1;
+      min-width: 140px;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: 15px/1.2 ui-rounded, "Segoe UI", sans-serif;
+      background: rgba(255,255,255,0.9);
+      color: #16342c;
+      outline: none;
+    }
+    .hint { font-size: 11px; opacity: 0.7; padding-left: 4px; }
+    #caption {
+      position: fixed;
+      left: 12px; right: 12px;
+      bottom: 42px;
+      text-align: center;
+      color: #14352c;
+      font: 600 17px/1.35 ui-rounded, "Segoe UI", sans-serif;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.45);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      z-index: 4;
+    }
+    #caption.show { opacity: 0.92; }
+    #status-dot {
+      position: fixed;
+      top: 10px; right: 12px;
+      font: 600 11px/1 ui-rounded, "Segoe UI", sans-serif;
+      color: #16342c;
+      opacity: 0.55;
+      z-index: 4;
+    }
+    body.kiosk #caption { bottom: 18px; }
+  </style>
+</head>
+<body>
+  <div id="screen">
+    <svg id="face-svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+      <g id="face">
+        <g id="eye-l" class="eye">
+          <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
+          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+        </g>
+        <g id="eye-r" class="eye">
+          <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
+          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+        </g>
+        <path id="mouth-fill" fill="var(--ink)" opacity="0" />
+        <path id="mouth-line" fill="none" stroke="var(--ink)" stroke-width="6.2"
+              stroke-linecap="round" stroke-linejoin="round" />
+      </g>
+    </svg>
+  </div>
+
+  <div id="dock">
+    <div class="grab"></div>
+    <div class="row">
+      <button data-state="idle">Idle</button>
+      <button data-state="listen">Listen</button>
+      <button data-state="think">Think</button>
+      <button id="btn-speak">Speak</button>
+      <button data-idle="random">Idle move</button>
+      <button id="btn-demo">Demo</button>
+    </div>
+    <div class="row" id="moods"></div>
+    <div class="row">
+      <input id="say" value="Hey. I'm here. What are we building?" />
+      <button id="btn-say">Talk</button>
+      <button id="btn-listen">Listen</button>
+    </div>
+    <div class="hint">Tap the face to hide this. If Grok is connected, Talk sends your words through me.</div>
+  </div>
+  <div id="status-dot"></div>
+  <div id="caption"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const svg = $("face-svg");
+  const face = $("face");
+  const eyeL = $("eye-l");
+  const eyeR = $("eye-r");
+  const mouthFill = $("mouth-fill");
+  const mouthLine = $("mouth-line");
+  const dock = $("dock");
+  const params = new URLSearchParams(location.search);
+  if (params.get("kiosk") === "1") document.body.classList.add("kiosk");
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const now = () => performance.now();
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+
+  const VISEMES = {
+    rest: { open: 0.00, width: 0.54, round: 0.00, smile: null },
+    MBP:  { open: 0.00, width: 0.30, round: 0.12, smile: 0.08 },
+    FV:   { open: 0.14, width: 0.52, round: 0.05, smile: 0.12 },
+    TH:   { open: 0.20, width: 0.44, round: 0.10, smile: 0.10 },
+    L:    { open: 0.26, width: 0.42, round: 0.18, smile: 0.10 },
+    CH:   { open: 0.24, width: 0.40, round: 0.22, smile: 0.18 },
+    IY:   { open: 0.30, width: 0.74, round: 0.06, smile: 0.55 },
+    EY:   { open: 0.40, width: 0.64, round: 0.12, smile: 0.42 },
+    EH:   { open: 0.46, width: 0.58, round: 0.18, smile: 0.22 },
+    AA:   { open: 0.84, width: 0.66, round: 0.42, smile: 0.12 },
+    AH:   { open: 0.62, width: 0.58, round: 0.34, smile: 0.10 },
+    UH:   { open: 0.40, width: 0.46, round: 0.38, smile: 0.06 },
+    OW:   { open: 0.68, width: 0.36, round: 0.96, smile: 0.00 },
+    UW:   { open: 0.38, width: 0.26, round: 1.00, smile: 0.00 },
+    WQ:   { open: 0.32, width: 0.28, round: 0.92, smile: 0.00 },
+  };
+
+  const DIGRAPHS = [
+    ["ough", "UW"], ["tion", "EH"], ["tch", "CH"],
+    ["ch", "CH"], ["sh", "CH"], ["zh", "CH"], ["th", "TH"],
+    ["ph", "FV"], ["wh", "WQ"], ["qu", "WQ"], ["ng", "UH"],
+    ["ee", "IY"], ["ea", "IY"], ["ey", "IY"], ["ie", "IY"],
+    ["oo", "UW"], ["ue", "UW"], ["ew", "UW"],
+    ["oa", "OW"], ["ow", "OW"], ["ou", "OW"], ["oi", "OW"], ["oy", "OW"],
+    ["ai", "EY"], ["ay", "EY"], ["ei", "EY"],
+    ["ar", "AA"], ["er", "UH"], ["ir", "UH"], ["ur", "UH"], ["or", "OW"],
+  ];
+
+  const LETTER = {
+    a: "AA", e: "EH", i: "IY", o: "OW", u: "UH", y: "IY",
+    m: "MBP", b: "MBP", p: "MBP",
+    f: "FV", v: "FV",
+    l: "L", r: "L", n: "L", d: "L", t: "TH",
+    s: "CH", z: "CH", c: "CH", j: "CH", g: "CH", k: "CH", x: "CH", q: "WQ",
+    w: "WQ", h: "EH",
+  };
+
+  const EMOTIONS = {
+    neutral:  { smile: 0.55, eye: 1.00, eyeY: 1.00, lookX: 0, lookY: 0, tilt: 0, lid: 0, skew: 0, width: 0.54 },
+    happy:    { smile: 0.86, eye: 1.00, eyeY: 0.92, lookX: 0, lookY: 0, tilt: 0, lid: 0, skew: 0, width: 0.62 },
+    joy:      { smile: 1.00, eye: 1.04, eyeY: 0.62, lookX: 0, lookY: 2, tilt: -2, lid: 0.15, skew: 0, width: 0.70 },
+    sad:      { smile: -0.72, eye: 0.92, eyeY: 1.00, lookX: 0, lookY: 7, tilt: 0, lid: 0.08, skew: 0, width: 0.48 },
+    sorry:    { smile: -0.48, eye: 0.90, eyeY: 0.88, lookX: 0, lookY: 8, tilt: 3, lid: 0.2, skew: 0, width: 0.44 },
+    smirk:    { smile: 0.62, eye: 1.02, eyeY: 0.48, lookX: 6, lookY: 0, tilt: -4, lid: 0.45, skew: -0.85, width: 0.58 },
+    surprised:{ smile: 0.05, eye: 1.22, eyeY: 1.22, lookX: 0, lookY: -2, tilt: 0, lid: 0, skew: 0, width: 0.28, open: 0.72, round: 0.9 },
+    confused: { smile: 0.05, eye: 1.00, eyeY: 0.90, lookX: -8, lookY: -4, tilt: 9, lid: 0.1, skew: 0.35, width: 0.40 },
+    thinking: { smile: 0.08, eye: 0.98, eyeY: 1.00, lookX: 7, lookY: -11, tilt: 4, lid: 0.05, skew: 0, width: 0.32 },
+    focused:  { smile: 0.00, eye: 1.06, eyeY: 0.52, lookX: 0, lookY: 1, tilt: 0, lid: 0.55, skew: 0, width: 0.38 },
+    sleepy:   { smile: 0.42, eye: 1.00, eyeY: 0.28, lookX: 0, lookY: 6, tilt: 2, lid: 0.35, skew: 0, width: 0.46 },
+    listen:   { smile: 0.35, eye: 1.08, eyeY: 1.06, lookX: 0, lookY: 0, tilt: 0, lid: 0, skew: 0, width: 0.40 },
+    worried:  { smile: -0.28, eye: 1.06, eyeY: 1.08, lookX: 0, lookY: -3, tilt: -3, lid: 0.12, skew: 0, width: 0.36 },
+    angry:    { smile: -0.22, eye: 1.08, eyeY: 0.46, lookX: 0, lookY: 3, tilt: 0, lid: 0.7, skew: 0, width: 0.34 },
+    love:     { smile: 0.92, eye: 1.00, eyeY: 0.72, lookX: 0, lookY: 2, tilt: -1, lid: 0.1, skew: 0, width: 0.66 },
+    embarrassed:{ smile: 0.40, eye: 0.94, eyeY: 0.85, lookX: 10, lookY: 8, tilt: 6, lid: 0.2, skew: 0.2, width: 0.34 },
+    excited:  { smile: 0.95, eye: 1.16, eyeY: 1.10, lookX: 0, lookY: -3, tilt: -3, lid: 0, skew: 0, width: 0.68 },
+  };
+
+  const state = {
+    mode: "idle",
+    emotion: "happy",
+    lookX: 0, lookY: 0,
+    blinkL: 1, blinkR: 1,
+    eye: 1, eyeY: 1,
+    tilt: 0, lid: 0,
+    mouth: { open: 0, width: 0.54, round: 0, smile: 0.7, skew: 0 },
+    jaw: 0,
+    breath: 0,
+    talking: false,
+    mumble: false,
+    audioLevel: 0,
+    holdLook: false,
+  };
+
+  let emotionName = "happy";
+  let viseme = { ...VISEMES.rest };
+  let visemeSmooth = { open: 0, width: 0.54, round: 0, smile: 0.55 };
+  let visemeUntil = 0;
+  let visemeQueue = [];
+  let idleBusyUntil = 0;
+  let nextBlinkAt = now() + 900;
+  let nextIdleAt = now() + 1400;
+  let lastIdles = [];
+  let speakTimer = 0;
+  let audioHold = 0;
+  let speakResolve = null;
+  const tweens = [];
+
+  function tweenTo(obj, key, to, ms, ease = easeInOut) {
+    tweens.push({ obj, key, from: obj[key], to, ms, t0: now(), ease });
+  }
+  function tweenState(key, to, ms, ease) { tweenTo(state, key, to, ms, ease); }
+
+  function tickTweens(t) {
+    for (let i = tweens.length - 1; i >= 0; i--) {
+      const tw = tweens[i];
+      const p = clamp((t - tw.t0) / tw.ms, 0, 1);
+      tw.obj[tw.key] = lerp(tw.from, tw.to, tw.ease(p));
+      if (p >= 1) tweens.splice(i, 1);
+    }
+  }
+
+  function applyEmotion(name, ms = 280) {
+    const e = EMOTIONS[name] || EMOTIONS.neutral;
+    emotionName = name;
+    state.emotion = name;
+    tweenState("eye", e.eye, ms);
+    tweenState("eyeY", e.eyeY, ms);
+    tweenState("tilt", e.tilt, ms);
+    tweenState("lid", e.lid, ms);
+    if (!state.holdLook && !state.talking) {
+      tweenState("lookX", e.lookX, ms);
+      tweenState("lookY", e.lookY, ms);
+    }
+    tweenTo(state.mouth, "smile", e.smile, ms);
+    tweenTo(state.mouth, "skew", e.skew, ms);
+    tweenTo(state.mouth, "width", e.width, ms);
+    if (!state.talking) {
+      tweenTo(state.mouth, "open", e.open || 0, ms);
+      tweenTo(state.mouth, "round", e.round || 0, ms);
+    }
+    document.querySelectorAll("[data-emotion]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.emotion === name);
+    });
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    document.querySelectorAll("[data-state]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.state === mode);
+    });
+    if (mode === "listen") applyEmotion("listen", 220);
+    if (mode === "think") applyEmotion("thinking", 260);
+    if (mode === "idle" && (emotionName === "listen" || emotionName === "thinking")) {
+      applyEmotion("happy", 300);
+    }
+    if (mode === "sleep") applyEmotion("sleepy", 500);
+  }
+
+  function textToVisemes(text) {
+    const out = [];
+    const words = String(text).toLowerCase().split(/(\s+|[.,!?…;:]+)/);
+    for (const w of words) {
+      if (!w) continue;
+      if (/^\s+$/.test(w)) { out.push(["rest", 90]); continue; }
+      if (/^[.,!?…;:]+$/.test(w)) { out.push(["MBP", 70], ["rest", 220]); continue; }
+      let i = 0;
+      while (i < w.length) {
+        let hit = null;
+        for (const [g, v] of DIGRAPHS) {
+          if (w.startsWith(g, i)) { hit = [g, v]; break; }
+        }
+        if (hit) {
+          const vowel = "AA,AH,EH,IY,EY,OW,UW,UH".includes(hit[1]);
+          out.push([hit[1], vowel ? rand(95, 150) : rand(55, 85)]);
+          i += hit[0].length;
+          continue;
+        }
+        const ch = w[i];
+        const v = LETTER[ch] || "rest";
+        const vowel = "aeiouy".includes(ch);
+        out.push([v, vowel ? rand(90, 140) : rand(48, 78)]);
+        i += 1;
+      }
+      out.push(["MBP", 45], ["rest", 70]);
+    }
+    return out;
+  }
+
+  function playVisemes(seq) {
+    visemeQueue = seq.slice();
+    visemeUntil = 0;
+    state.talking = true;
+    setMode("talk");
+  }
+
+  function pumpVisemes(t) {
+    if (!state.talking) return;
+    if (state.audioLevel > 0.02) return;
+    if (t < visemeUntil) return;
+    if (!visemeQueue.length) {
+      if (state.mumble || state.audioLevel > 0.03) {
+        const vowels = ["AA", "EH", "OW", "IY", "UH", "AH", "EY"];
+        visemeQueue.push([pick(vowels), rand(70, 140)]);
+        if (Math.random() < 0.3) visemeQueue.push(["MBP", rand(40, 70)]);
+        visemeQueue.push(["rest", rand(25, 80)]);
+      } else {
+        viseme = { ...VISEMES.rest };
+        state.talking = false;
+        if (state.mode === "talk") setMode("idle");
+        emit("speechend");
+        resolveSpeak();
+        return;
+      }
+    }
+    const [name, dur] = visemeQueue.shift();
+    viseme = { ...(VISEMES[name] || VISEMES.rest) };
+    visemeUntil = t + dur;
+  }
+
+  function levelToMouth(level) {
+    const v = clamp(level, 0, 1);
+    audioHold = v > 0.04 ? now() + 120 : audioHold;
+    if (v < 0.03 && now() > audioHold) {
+      viseme = { ...VISEMES.rest };
+      return;
+    }
+    const shapes = ["AA", "AH", "EH", "OW", "IY", "UH"];
+    const name = shapes[Math.floor((Math.sin(now() / 90) * 0.5 + 0.5) * (shapes.length - 0.01))];
+    const base = VISEMES[name];
+    viseme = {
+      open: lerp(0.08, base.open, clamp(v * 1.35, 0, 1)),
+      width: base.width,
+      round: base.round,
+      smile: base.smile,
+    };
+  }
+
+  function blink(kind = "normal") {
+    const t = now();
+    const close = kind === "slow" ? 160 : 70;
+    const hold = kind === "slow" ? 80 : 40;
+    const open = kind === "slow" ? 160 : 90;
+    tweenState("blinkL", 0.06, close, easeOut);
+    tweenState("blinkR", 0.06, close, easeOut);
+    setTimeout(() => {
+      tweenState("blinkL", 1, open, easeOut);
+      tweenState("blinkR", 1, open, easeOut);
+    }, close + hold);
+    if (kind === "double") {
+      setTimeout(() => blink("normal"), close + hold + open + 70);
+    }
+    nextBlinkAt = t + rand(2200, 5600);
+  }
+
+  function wink(side) {
+    const key = side === "r" ? "blinkR" : "blinkL";
+    tweenState(key, 0.05, 90, easeOut);
+    setTimeout(() => tweenState(key, 1, 140, easeOut), 180);
+    idleBusyUntil = now() + 500;
+  }
+
+  function lookTo(x, y, ms = 320) {
+    state.holdLook = true;
+    tweenState("lookX", x, ms);
+    tweenState("lookY", y, ms);
+    setTimeout(() => { state.holdLook = false; }, ms + 40);
+  }
+
+  const IDLES = {
+    blink: () => blink("normal"),
+    doubleBlink: () => blink("double"),
+    slowBlink: () => blink("slow"),
+    lookLeft: () => { lookTo(-14, 1, 380); setTimeout(() => lookTo(0, 0, 420), 700); },
+    lookRight: () => { lookTo(14, 1, 380); setTimeout(() => lookTo(0, 0, 420), 700); },
+    lookUp: () => { lookTo(3, -12, 360); setTimeout(() => lookTo(0, 0, 400), 650); },
+    lookDown: () => { lookTo(0, 10, 300); setTimeout(() => lookTo(0, 0, 360), 560); },
+    lookAround: () => {
+      lookTo(-12, -4, 280);
+      setTimeout(() => lookTo(12, 2, 420), 420);
+      setTimeout(() => lookTo(4, -8, 360), 900);
+      setTimeout(() => lookTo(0, 0, 400), 1300);
+    },
+    glance: () => {
+      lookTo(pick([-10, 10]), pick([-3, 2]), 160);
+      setTimeout(() => lookTo(0, 0, 220), 280);
+    },
+    dart: () => {
+      lookTo(-16, 0, 90);
+      setTimeout(() => lookTo(16, -2, 120), 140);
+      setTimeout(() => lookTo(0, 0, 160), 300);
+    },
+    squint: () => {
+      const y = state.eyeY;
+      tweenState("eyeY", 0.42, 180);
+      setTimeout(() => tweenState("eyeY", y, 260), 380);
+    },
+    happySquint: () => {
+      const s = state.mouth.smile;
+      tweenState("eyeY", 0.5, 200);
+      tweenTo(state.mouth, "smile", 1, 200);
+      setTimeout(() => { tweenState("eyeY", EMOTIONS[emotionName].eyeY, 280); tweenTo(state.mouth, "smile", s, 280); }, 500);
+    },
+    winkLeft: () => wink("l"),
+    winkRight: () => wink("r"),
+    mouthTwitch: () => {
+      const s = state.mouth.smile;
+      tweenTo(state.mouth, "smile", clamp(s + 0.25, -1, 1), 120);
+      setTimeout(() => tweenTo(state.mouth, "smile", s, 180), 200);
+    },
+    hmm: () => {
+      tweenTo(state.mouth, "width", 0.28, 180);
+      tweenTo(state.mouth, "smile", 0.05, 180);
+      lookTo(8, -10, 300);
+      setTimeout(() => {
+        tweenTo(state.mouth, "width", EMOTIONS[emotionName].width, 260);
+        tweenTo(state.mouth, "smile", EMOTIONS[emotionName].smile, 260);
+        lookTo(EMOTIONS[emotionName].lookX, EMOTIONS[emotionName].lookY, 300);
+      }, 700);
+    },
+    tinyYawn: () => {
+      tweenTo(state.mouth, "open", 0.78, 280);
+      tweenTo(state.mouth, "round", 0.9, 280);
+      tweenTo(state.mouth, "width", 0.34, 280);
+      tweenState("eyeY", 0.35, 280);
+      setTimeout(() => {
+        tweenTo(state.mouth, "open", 0, 320);
+        tweenTo(state.mouth, "round", 0, 320);
+        tweenTo(state.mouth, "width", EMOTIONS[emotionName].width, 320);
+        tweenState("eyeY", EMOTIONS[emotionName].eyeY, 320);
+        blink("slow");
+      }, 700);
+    },
+    bounce: () => {
+      tweenState("lookY", -6, 120);
+      setTimeout(() => tweenState("lookY", 0, 180), 140);
+    },
+    wander: () => {
+      lookTo(rand(-12, 12), rand(-8, 8), 500);
+      setTimeout(() => lookTo(0, 0, 600), 1100);
+    },
+    sideEye: () => { lookTo(15, 3, 240); setTimeout(() => lookTo(0, 0, 400), 800); },
+    peek: () => { lookTo(-16, -2, 200); setTimeout(() => lookTo(0, 0, 280), 520); },
+    sigh: () => {
+      tweenTo(state.mouth, "open", 0.22, 240);
+      tweenTo(state.mouth, "width", 0.5, 240);
+      tweenState("eyeY", 0.55, 240);
+      setTimeout(() => {
+        tweenTo(state.mouth, "open", 0, 360);
+        tweenState("eyeY", EMOTIONS[emotionName].eyeY, 360);
+      }, 420);
+    },
+    tilt: () => {
+      const t0 = state.tilt;
+      tweenState("tilt", t0 + (Math.random() < 0.5 ? -8 : 8), 280);
+      setTimeout(() => tweenState("tilt", EMOTIONS[emotionName].tilt, 360), 700);
+    },
+    listenLean: () => { lookTo(4, 4, 300); setTimeout(() => lookTo(0, 0, 400), 900); },
+    stretch: () => {
+      tweenState("eye", 1.2, 200);
+      tweenState("eyeY", 1.2, 200);
+      setTimeout(() => {
+        tweenState("eye", EMOTIONS[emotionName].eye, 300);
+        tweenState("eyeY", EMOTIONS[emotionName].eyeY, 300);
+        blink("slow");
+      }, 360);
+    },
+    nod: () => {
+      lookTo(0, 8, 120);
+      setTimeout(() => lookTo(0, -4, 140), 150);
+      setTimeout(() => lookTo(0, 0, 180), 320);
+    },
+    scan: () => {
+      lookTo(-12, -6, 220);
+      setTimeout(() => lookTo(12, -6, 700), 280);
+      setTimeout(() => lookTo(0, 0, 300), 1100);
+    },
+    microSmile: () => {
+      const s = state.mouth.smile;
+      tweenTo(state.mouth, "smile", clamp(s + 0.35, -1, 1), 220);
+      setTimeout(() => tweenTo(state.mouth, "smile", s, 400), 500);
+    },
+    confusedTilt: () => {
+      tweenState("tilt", 10, 240);
+      lookTo(-8, -6, 240);
+      tweenTo(state.mouth, "smile", 0, 240);
+      setTimeout(() => {
+        tweenState("tilt", EMOTIONS[emotionName].tilt, 300);
+        lookTo(0, 0, 300);
+        tweenTo(state.mouth, "smile", EMOTIONS[emotionName].smile, 300);
+      }, 800);
+    },
+    settle: () => {
+      lookTo(0, 0, 400);
+      tweenTo(state.mouth, "open", 0, 300);
+      tweenTo(state.mouth, "round", 0, 300);
+    },
+  };
+
+  const IDLE_WEIGHTS = {
+    idle: [
+      ["lookLeft", 8], ["lookRight", 8], ["lookAround", 7], ["glance", 9],
+      ["wander", 7], ["lookUp", 5], ["lookDown", 4], ["doubleBlink", 5],
+      ["slowBlink", 4], ["mouthTwitch", 6], ["microSmile", 5], ["tilt", 4],
+      ["sideEye", 3], ["peek", 3], ["nod", 4], ["happySquint", 3],
+      ["winkLeft", 2], ["winkRight", 1], ["bounce", 3], ["sigh", 2],
+      ["dart", 2], ["stretch", 2], ["tinyYawn", 1],
+    ],
+    listen: [
+      ["slowBlink", 8], ["glance", 6], ["nod", 5], ["listenLean", 6],
+      ["microSmile", 4], ["lookDown", 3], ["settle", 4],
+    ],
+    think: [
+      ["lookUp", 10], ["hmm", 8], ["scan", 8], ["wander", 6],
+      ["tilt", 5], ["squint", 4], ["lookLeft", 4], ["lookRight", 4],
+    ],
+    talk: [["glance", 3], ["nod", 2], ["microSmile", 2]],
+    sleep: [["slowBlink", 8], ["tinyYawn", 3], ["sigh", 4], ["lookDown", 3]],
+  };
+
+  function weightedPick(pairs) {
+    const filtered = pairs.filter(([n]) => !lastIdles.includes(n));
+    const pool = filtered.length ? filtered : pairs;
+    const total = pool.reduce((s, [, w]) => s + w, 0);
+    let r = Math.random() * total;
+    for (const [n, w] of pool) { r -= w; if (r <= 0) return n; }
+    return pool[0][0];
+  }
+
+  function playIdle(name) {
+    const fn = IDLES[name];
+    if (!fn) return;
+    fn();
+    lastIdles.push(name);
+    if (lastIdles.length > 3) lastIdles.shift();
+    idleBusyUntil = now() + 900;
+    nextIdleAt = now() + rand(1200, 3200);
+  }
+
+  function scheduleIdle(t) {
+    if (t < idleBusyUntil || t < nextIdleAt) return;
+    if (state.talking && Math.random() < 0.7) { nextIdleAt = t + 600; return; }
+    const table = IDLE_WEIGHTS[state.mode] || IDLE_WEIGHTS.idle;
+    playIdle(weightedPick(table));
+  }
+
+  function mouthPath(m) {
+    const cx = 100, cy = 132;
+    const w = 16 + m.width * 46;
+    const skew = m.skew * 7;
+    const smile = m.smile;
+    const left = cx - w / 2, right = cx + w / 2;
+    const ly = cy + skew, ry = cy - skew;
+    const curve = smile * (10 + w * 0.12);
+    const open = m.open * (18 + w * 0.12);
+    const round = m.round;
+
+    if (open < 0.12 && round < 0.25) {
+      const cpx = cx, cpy = cy + curve;
+      return {
+        line: `M ${left.toFixed(2)} ${ly.toFixed(2)} Q ${cpx.toFixed(2)} ${cpy.toFixed(2)} ${right.toFixed(2)} ${ry.toFixed(2)}`,
+        fill: "",
+        fillOp: 0,
+      };
+    }
+
+    if (round > 0.55) {
+      const rx = lerp(w * 0.22, w * 0.38, round) * lerp(0.7, 1, m.open);
+      const ry2 = lerp(6, 16, m.open) * lerp(0.8, 1.15, round);
+      const y = cy + 2 + state.jaw * 4;
+      return {
+        line: "",
+        fill: `M ${cx - rx} ${y} a ${rx} ${ry2} 0 1 0 ${rx * 2} 0 a ${rx} ${ry2} 0 1 0 ${-rx * 2} 0`,
+        fillOp: 1,
+      };
+    }
+
+    const up = cy - open * 0.25 + curve * 0.15;
+    const dn = cy + open + Math.max(curve, 0) * 0.35 + state.jaw * 5;
+    const cUp = up - Math.abs(curve) * 0.15;
+    const cDn = dn + open * 0.35;
+    const fill = `M ${left} ${ly}
+      Q ${cx} ${cUp} ${right} ${ry}
+      Q ${cx} ${cDn} ${left} ${ly} Z`;
+    return { line: "", fill, fillOp: 1 };
+  }
+
+  function render() {
+    const e = EMOTIONS[emotionName] || EMOTIONS.neutral;
+    const talking = state.talking || state.audioLevel > 0.03;
+    const m = state.mouth;
+    const smile = talking ? lerp(m.smile, visemeSmooth.smile, 0.85) : m.smile;
+    const open = talking ? visemeSmooth.open : m.open;
+    const width = talking ? lerp(m.width, visemeSmooth.width, 0.9) : m.width;
+    const round = talking ? visemeSmooth.round : m.round;
+
+    const drawn = mouthPath({ open, width, round, smile, skew: m.skew });
+    mouthLine.setAttribute("d", drawn.line || "M 0 0");
+    mouthLine.setAttribute("opacity", drawn.fillOp ? 0 : 1);
+    mouthFill.setAttribute("d", drawn.fill || "M 0 0");
+    mouthFill.setAttribute("opacity", drawn.fillOp);
+
+    const ox = 70, oy = 88, gap = 60;
+    const lookX = state.lookX, lookY = state.lookY;
+    const sx = state.eye;
+    const syL = state.eyeY * state.blinkL;
+    const syR = state.eyeY * state.blinkR;
+    const lidSquash = 1 - state.lid * 0.12;
+
+    eyeL.setAttribute("transform",
+      `translate(${ox + lookX}, ${oy + lookY}) scale(${sx * lidSquash}, ${syL}) rotate(${state.lid * -12})`);
+    eyeR.setAttribute("transform",
+      `translate(${ox + gap + lookX}, ${oy + lookY}) scale(${sx * lidSquash}, ${syR}) rotate(${state.lid * 12})`);
+
+    const breath = 1 + Math.sin(state.breath) * 0.012 + (talking ? viseme.open * 0.02 : 0);
+    face.setAttribute("transform",
+      `translate(100 100) rotate(${state.tilt}) scale(${breath}) translate(-100 -100)`);
+  }
+
+  function frame(t) {
+    tickTweens(t);
+    state.breath = t / 900;
+    if (t >= nextBlinkAt && !state.talking) blink(Math.random() < 0.18 ? "slow" : "normal");
+    else if (t >= nextBlinkAt && state.talking && Math.random() < 0.4) blink("normal");
+    pumpVisemes(t);
+    if (state.audioLevel > 0) levelToMouth(state.audioLevel);
+    const closing = viseme.open < visemeSmooth.open;
+    const lip = closing ? 0.48 : 0.22;
+    visemeSmooth.open = lerp(visemeSmooth.open, viseme.open, lip);
+    visemeSmooth.width = lerp(visemeSmooth.width, viseme.width, 0.28);
+    visemeSmooth.round = lerp(visemeSmooth.round, viseme.round, 0.28);
+    visemeSmooth.smile = lerp(visemeSmooth.smile, viseme.smile == null ? visemeSmooth.smile : viseme.smile, 0.22);
+    state.jaw = lerp(state.jaw, visemeSmooth.open, 0.28);
+    scheduleIdle(t);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  const listeners = {};
+  function emit(name, detail) {
+    (listeners[name] || []).forEach((fn) => fn(detail));
+  }
+
+  function resolveSpeak() {
+    if (!speakResolve) return;
+    const done = speakResolve;
+    speakResolve = null;
+    done();
+  }
+
+  function speak(text, opts = {}) {
+    const str = String(text || "").trim();
+    if (!str) return Promise.resolve();
+    if (opts.emotion) applyEmotion(opts.emotion, 200);
+    resolveSpeak();
+    window.speechSynthesis?.cancel();
+    const seq = textToVisemes(str);
+    const visemeMs = seq.reduce((sum, [, d]) => sum + d, 0);
+    state.mumble = false;
+    playVisemes(seq);
+    const done = new Promise((resolve) => { speakResolve = resolve; });
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(speakTimer);
+      state.mumble = false;
+      visemeQueue = [];
+      visemeUntil = 0;
+      resolveSpeak();
+    };
+    try {
+      const u = new SpeechSynthesisUtterance(str);
+      u.rate = opts.rate || 1.02;
+      u.pitch = opts.pitch || 1.12;
+      u.onend = finish;
+      u.onerror = finish;
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      const v = voices.find((x) => /en/i.test(x.lang) && /female|google|aria|samantha|zira/i.test(x.name)) || voices.find((x) => /en/i.test(x.lang));
+      if (v) u.voice = v;
+      state.mumble = true;
+      window.speechSynthesis?.speak(u);
+    } catch (_) {
+      state.mumble = false;
+    }
+    const fallbackMs = Math.max(visemeMs + 500, str.split(/\s+/).length * 280 + 900);
+    speakTimer = setTimeout(finish, fallbackMs);
+    emit("speechstart", { text: str });
+    return done;
+  }
+
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function demo() {
+    applyEmotion("happy");
+    await speak("Hey. I'm your face now.");
+    setMode("listen");
+    await pause(900);
+    setMode("think");
+    await pause(1400);
+    applyEmotion("smirk");
+    await speak("I can smirk when a joke lands.");
+    applyEmotion("surprised");
+    await speak("Oh. That actually worked?");
+    applyEmotion("sorry");
+    await speak("Yeah, that one's on me.");
+    applyEmotion("excited");
+    await speak("Okay. I'm ready. Talk to me.");
+    applyEmotion("happy");
+    setMode("idle");
+  }
+
+  const api = {
+    speak,
+    listen() { visemeQueue = []; state.talking = false; setMode("listen"); },
+    think() { visemeQueue = []; state.talking = false; setMode("think"); },
+    idle() { visemeQueue = []; state.talking = false; setMode("idle"); },
+    sleep() { visemeQueue = []; state.talking = false; setMode("sleep"); },
+    setEmotion(name) { if (EMOTIONS[name]) applyEmotion(name); },
+    playIdle(name) { if (name === "random") playIdle(weightedPick(IDLE_WEIGHTS.idle)); else playIdle(name); },
+    startTalking() { state.talking = true; state.mumble = true; setMode("talk"); },
+    stopTalking() { state.talking = false; state.mumble = false; visemeQueue = []; viseme = { ...VISEMES.rest }; if (state.mode === "talk") setMode("idle"); },
+    setAudioLevel(v) {
+      state.audioLevel = clamp(+v || 0, 0, 1);
+      if (state.audioLevel > 0.04) { state.talking = true; if (state.mode !== "talk") setMode("talk"); }
+    },
+    connectAnalyser(analyser) {
+      const data = new Uint8Array(analyser.fftSize);
+      const loop = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const x = (data[i] - 128) / 128;
+          sum += x * x;
+        }
+        api.setAudioLevel(Math.sqrt(sum / data.length) * 4);
+        requestAnimationFrame(loop);
+      };
+      loop();
+    },
+    on(name, fn) { (listeners[name] ||= []).push(fn); },
+    demo,
+    emotions: Object.keys(EMOTIONS),
+    idles: Object.keys(IDLES),
+  };
+  window.BotFace = api;
+
+  window.addEventListener("message", (ev) => {
+    const d = ev.data || {};
+    if (d.type === "speak") api.speak(d.text, d);
+    if (d.type === "emotion") api.setEmotion(d.name);
+    if (d.type === "listen") api.listen();
+    if (d.type === "think") api.think();
+    if (d.type === "idle") api.idle();
+    if (d.type === "audio") api.setAudioLevel(d.level);
+  });
+
+  const moodRow = $("moods");
+  for (const name of api.emotions) {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.dataset.emotion = name;
+    b.addEventListener("click", () => api.setEmotion(name));
+    moodRow.appendChild(b);
+  }
+
+  dock.addEventListener("click", (e) => {
+    if (e.target.dataset.state) api[e.target.dataset.state]?.() || setMode(e.target.dataset.state);
+    if (e.target.dataset.idle) api.playIdle(e.target.dataset.idle);
+  });
+  let grokLive = false;
+  $("btn-say").addEventListener("click", () => {
+    if (grokLive) return;
+    api.speak($("say").value, { emotion: emotionName === "happy" ? "happy" : emotionName });
+  });
+  $("btn-speak").addEventListener("click", () => { if (!grokLive) api.speak($("say").value); });
+  $("btn-demo").addEventListener("click", () => api.demo());
+  $("say").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || grokLive) return;
+    api.speak($("say").value);
+  });
+
+  svg.addEventListener("click", () => dock.classList.toggle("open"));
+  dock.querySelector(".grab").addEventListener("click", () => dock.classList.add("open"));
+
+  applyEmotion(params.get("emotion") || "happy", 1);
+  setMode("idle");
+  requestAnimationFrame(frame);
+
+  const first = () => {
+    const line = params.get("say") || "Hey. I'm here. What are we building?";
+    api.speak(line, { emotion: "happy" });
+    window.removeEventListener("pointerdown", first);
+  };
+  window.addEventListener("pointerdown", first, { once: true });
+  if (params.get("autostart") === "1") setTimeout(first, 400);
+  if (params.get("demo") === "1") {
+    window.removeEventListener("pointerdown", first);
+    setTimeout(() => api.demo(), 500);
+  }
+
+  const captionEl = $("caption");
+  const statusEl = $("status-dot");
+  let captionTimer = 0;
+  function showCaption(text) {
+    captionEl.textContent = text;
+    captionEl.classList.add("show");
+    clearTimeout(captionTimer);
+    captionTimer = setTimeout(() => captionEl.classList.remove("show"), 8000);
+  }
+
+  const FACE_FROM_HERBIE = {
+    calm: "neutral", curious: "listen", happy: "happy", playful: "smirk",
+    thinking: "thinking", surprised: "surprised", concerned: "sorry", sleepy: "sleepy",
+  };
+
+  let grokBusy = false;
+  let sentenceQ = Promise.resolve();
+  function queueSpeak(text, emotion) {
+    sentenceQ = sentenceQ.then(async () => {
+      if (emotion) api.setEmotion(emotion);
+      await api.speak(text);
+    }).catch(() => {});
+    return sentenceQ;
+  }
+
+  async function askGrok(text) {
+    const said = String(text || "").trim();
+    if (!said || grokBusy) return;
+    grokBusy = true;
+    api.listen();
+    showCaption(said);
+    await new Promise((r) => setTimeout(r, 280));
+    api.think();
+    try {
+      const res = await fetch("/v1/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: said }),
+      });
+      if (!res.ok || !res.body) throw new Error("chat_failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let pending = "";
+      let emotion = "happy";
+      api.startTalking();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev;
+          try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.type === "error") {
+            api.setEmotion("sorry");
+            await queueSpeak("I couldn't reach my cortex. Check the xAI key.", "sorry");
+            throw new Error(ev.error || "grok_error");
+          }
+          if (ev.type === "token") pending += ev.text || "";
+          if (ev.type === "done") {
+            emotion = ev.emotion || FACE_FROM_HERBIE[ev.herbie_expression] || "happy";
+            pending = ev.text || pending;
+          }
+        }
+      }
+      const cleaned = pending.replace(/^EMOTION:\s*\w+\s*/i, "").trim() || pending.trim();
+      api.stopTalking();
+      showCaption(cleaned);
+      await queueSpeak(cleaned, emotion);
+      api.idle();
+    } catch (err) {
+      api.stopTalking();
+      api.idle();
+      if (String(err.message) !== "grok_error") {
+        api.setEmotion("sorry");
+        await queueSpeak("Yeah, that request didn't make it out.", "sorry");
+      }
+    } finally {
+      grokBusy = false;
+    }
+  }
+
+  async function bootCompanion() {
+    try {
+      const s = await fetch("/status", { cache: "no-store" }).then((r) => r.json());
+      if (!s || !s.companion) return false;
+      const grok = !!s.grok;
+      const herbie = !!s.herbie;
+      statusEl.textContent = (grok ? "Grok" : "face only") + (herbie ? " · Herbie" : "");
+      $("say").value = grok ? "What's on your mind?" : $("say").value;
+      $("btn-say").textContent = grok ? "Ask me" : "Talk";
+      window.removeEventListener("pointerdown", first);
+      if (grok) {
+        grokLive = true;
+        const ask = () => {
+          const t = $("say").value;
+          $("say").value = "";
+          askGrok(t);
+        };
+        $("btn-say").onclick = ask;
+        $("btn-speak").onclick = ask;
+        $("say").onkeydown = (e) => { if (e.key === "Enter") ask(); };
+        api.setEmotion("happy");
+        api.idle();
+        showCaption("I'm in here. Ask me anything.");
+      } else if (herbie) {
+        api.setEmotion("happy");
+        api.idle();
+        showCaption("Herbie's face is live. Add an xAI key to let me talk.");
+      } else {
+        api.setEmotion("thinking");
+        await api.speak("I can wear this face all day. To think as Grok, drop an XAI API key in the env file.");
+      }
+      const followHerbie = async () => {
+        if (grokBusy) return;
+        try {
+          const snap = await fetch("/v1/expression", { cache: "no-store" }).then((r) => r.json());
+          if (!snap || !snap.herbie) return;
+          const face = snap.face || FACE_FROM_HERBIE[snap.expression];
+          if (snap.speaking) {
+            if (face) api.setEmotion(face);
+            if (!state.talking) api.startTalking();
+            return;
+          }
+          if (state.talking) api.stopTalking();
+          if (snap.asleep) { api.sleep(); return; }
+          if (snap.listening) { api.listen(); return; }
+          if (face && face !== emotionName) api.setEmotion(face);
+        } catch (_) {}
+      };
+      if (herbie) {
+        followHerbie();
+        setInterval(followHerbie, 2000);
+      }
+      const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (Speech && grok) {
+        const rec = new Speech();
+        rec.lang = "en-US";
+        rec.interimResults = false;
+        rec.onstart = () => api.listen();
+        rec.onresult = (ev) => {
+          const heard = ev.results[0][0].transcript;
+          $("say").value = heard;
+          askGrok(heard);
+        };
+        rec.onerror = () => api.idle();
+        $("btn-listen").onclick = () => { try { rec.start(); } catch (_) {} };
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  bootCompanion();
+})();
+</script>
+</body>
+</html>
