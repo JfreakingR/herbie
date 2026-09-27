@@ -25,6 +25,9 @@ Usage:
                  any TOGGLE_PERIPHERAL on the feeding parts only - 3
                  feeding_tray, 4 the wheel, 7 instant_feeding. action 0..9,
                  duration 0..65535 (65535 = -1 as a signed short).
+                 Tried 2026-09-27, each sent twice: `probe 4 1 65535`,
+                 `probe 3 1 0`, `probe 7 1 0` - no movement at all. No
+                 reverse found; the wheel is treated as one-way.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
                  Only `forward` is physically confirmed as of 2026-09-19.
