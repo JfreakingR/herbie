@@ -21,6 +21,11 @@ they are large and re-downloadable.
   Brain > Appear on top), the boot receiver opens the app for a moment instead;
   the service starts from the foreground with the microphone and the screen
   steps back. Without it, opening the app once after a restart restores ears.
+  Confirmed on the Galaxy 2026-09-27. It also needs the screen lock set to
+  **None** (not Swipe, not a PIN): with a secure lock Android starts nothing
+  until someone unlocks the phone. Grant Appear on top from the PC with
+  `adb shell appops set com.prismml.herbiebrain SYSTEM_ALERT_WINDOW allow`.
+  Rebuild and install with `tools\Build-Herbie-Brain.ps1 -Install`.
 - Motion: no motor API, `motor_authority=false`, `safe_motion_state=STOP`
 
 The Qwen3 1.7B file is from the official `Qwen/Qwen3-1.7B-GGUF` repository at
