@@ -41,10 +41,14 @@ class HerbieEyes(private val context: Context) {
     fun capture(): ByteArray {
         check(allowed) { "camera_not_allowed" }
         val manager = context.getSystemService(CameraManager::class.java)
-        val cameraId = manager.cameraIdList.firstOrNull { id ->
+        // Empty when Android hides every camera from the app: the camera
+        // privacy switch, a device policy, or a camera service that is down.
+        val cameras = manager.cameraIdList
+        check(cameras.isNotEmpty()) { "no_camera_visible" }
+        val cameraId = cameras.firstOrNull { id ->
             manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) ==
                 CameraCharacteristics.LENS_FACING_BACK
-        } ?: manager.cameraIdList.first()
+        } ?: cameras.first()
         val characteristics = manager.getCameraCharacteristics(cameraId)
         val formats = checkNotNull(
             characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP),
