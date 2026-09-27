@@ -74,8 +74,8 @@ if ($volume -match 'volume is (\d+) in range \[(\d+)\.\.(\d+)\]') {
 
 Write-Host ''
 Write-Host 'His own log (most recent last):'
-$log = (& $AdbPath -s $DeviceSerial logcat -d -s 'HerbieEars:*' 'HerbieVoice:*' 'HerbieModelService:*' 'HerbieModelBridge:*' 2>$null) |
-    Where-Object { $_ -and $_ -notmatch '^-{5}' } | Select-Object -Last 25
+$log = (& $AdbPath -s $DeviceSerial logcat -d -s 'HerbieEars:*' 'HerbieVoice:*' 'HerbieModelService:*' 'HerbieModelBridge:*' 'HerbieEyes:*' 2>$null) |
+    Where-Object { $_ -and $_ -notmatch '^-{5}' } | Select-Object -Last 40
 if (-not $log) {
     Write-Host '  (nothing logged - his service has not started since the log was cleared)' -ForegroundColor DarkYellow
 } else {
@@ -91,6 +91,9 @@ if (-not $log) {
         Problem 'No hearing code ran at all - the installed app is probably an old build without ears.' `
             'adb install -r android_brain\release\HerbieBrain-debug.apk, then force stop and open the app.'
     }
+    if ($text -match 'Took a photo') { Ok 'He has taken a photo.' }
+    if ($text -match 'Camera capture failed') { Problem 'He tried to take a photo and the camera failed (reason in the lines above).' `
+            'Check the quick-settings "Camera access" tile is on, close other camera apps, then paste this to Claude.' }
     if ($text -match 'Playback failed') { Problem 'He tried to speak and playback failed.' 'Check the speaker / Bluetooth connection.' }
 }
 

@@ -26,7 +26,7 @@ import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.13.1"
+SERVICE_VERSION = "0.13.2"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
 NECK = herbie_neck.NeckState()
 TOKEN_PATH = Path(

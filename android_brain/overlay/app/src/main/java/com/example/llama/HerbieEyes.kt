@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
-import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
@@ -14,8 +13,8 @@ import android.hardware.camera2.CaptureRequest
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import android.util.Size
-import android.view.Surface
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -27,7 +26,10 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * The camera runs a short preview first so auto-exposure and focus settle -
  * a still taken straight away comes out black, which is what the Termux
- * camera command produced on this phone. Blocking; call off the main thread.
+ * camera command produced on this phone. The preview goes to an ImageReader
+ * that drops every frame: a SurfaceTexture nobody drains fills up and can
+ * stall the camera before the still is taken. Blocking; call off the main
+ * thread.
  */
 class HerbieEyes(private val context: Context) {
     /** True only while the service holds the camera foreground-service type. */
@@ -48,15 +50,18 @@ class HerbieEyes(private val context: Context) {
             characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP),
         ) { "no_stream_configuration" }
         val stillSize = pickSize(formats.getOutputSizes(ImageFormat.JPEG), MAX_CAPTURE_WIDTH)
-        val previewSize = pickSize(formats.getOutputSizes(SurfaceTexture::class.java), PREVIEW_WIDTH)
+        val previewSize = pickSize(formats.getOutputSizes(ImageFormat.YUV_420_888), PREVIEW_WIDTH)
 
         val thread = HandlerThread("herbie-eyes").apply { start() }
         val handler = Handler(thread.looper)
         val reader = ImageReader.newInstance(stillSize.width, stillSize.height, ImageFormat.JPEG, 2)
-        val texture = SurfaceTexture(false).apply {
-            setDefaultBufferSize(previewSize.width, previewSize.height)
-        }
-        val previewSurface = Surface(texture)
+        val preview = ImageReader.newInstance(
+            previewSize.width, previewSize.height, ImageFormat.YUV_420_888, 3,
+        )
+        preview.setOnImageAvailableListener({ source ->
+            source.acquireLatestImage()?.close()
+        }, handler)
+        val previewSurface = preview.surface
         val jpeg = AtomicReference<ByteArray?>()
         val failure = AtomicReference<String?>()
         val done = CountDownLatch(1)
@@ -129,13 +134,13 @@ class HerbieEyes(private val context: Context) {
 
             if (!done.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) error("camera_timeout")
             failure.get()?.let { error(it) }
+            Log.i(TAG, "Took a photo")
             return shrink(jpeg.get() ?: error("no_image"))
         } finally {
             runCatching { session?.close() }
             runCatching { device?.close() }
             runCatching { reader.close() }
-            runCatching { previewSurface.release() }
-            runCatching { texture.release() }
+            runCatching { preview.close() }
             thread.quitSafely()
         }
     }
@@ -174,5 +179,6 @@ class HerbieEyes(private val context: Context) {
         private const val JPEG_QUALITY = 85
         private const val WARM_UP_MS = 1_200L
         private const val TIMEOUT_SECONDS = 10L
+        private const val TAG = "HerbieEyes"
     }
 }

@@ -142,6 +142,13 @@ def post_bridge_voice(path: str, payload: dict[str, Any], timeout: float) -> dic
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             result = json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        # The app says why (camera_timeout, camera_error_3, ...): keep that.
+        try:
+            reason = json.loads(exc.read()).get("error")
+        except (OSError, ValueError, AttributeError):
+            reason = None
+        raise ChatUnavailable(f"http_{exc.code}: {reason or exc.reason}") from exc
     except (OSError, ValueError, urllib.error.URLError) as exc:
         raise ChatUnavailable(str(exc)) from exc
     if not isinstance(result, dict):
