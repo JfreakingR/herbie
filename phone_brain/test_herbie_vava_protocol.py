@@ -238,6 +238,8 @@ class TreatWheelTests(unittest.TestCase):
     def test_neck_is_9_steps_of_40_degrees(self):
         self.assertEqual(vava.NECK_STEPS_PER_TURN, 9)
         self.assertEqual(vava.NECK_DEGREES_PER_STEP, 40)
+        # Owner's first count: 18 frames for a full turn.
+        self.assertEqual(vava.NECK_STEPS_PER_TURN * vava.NECK_FRAMES_PER_STEP, 18)
 
     def test_neck_steps_go_forward_the_short_or_long_way(self):
         self.assertEqual(vava.neck_steps_to(0, 0), 0)
@@ -250,10 +252,6 @@ class TreatWheelTests(unittest.TestCase):
         self.assertEqual(vava.neck_steps_to(0, -40), 8)
         with self.assertRaisesRegex(ValueError, "invalid_degrees"):
             vava.neck_steps_to(0, "90")
-
-    def test_wheel_off_is_action_0(self):
-        payload = vava.parse_frame(vava.treat_wheel_off(1))["payload"]
-        self.assertEqual(payload, bytes([vava.PERIPHERAL_SNACK_LATTICES, 0, 0, 0]))
 
     def test_describe_names_the_wheel(self):
         text = vava.describe(vava.parse_frame(vava.treat_wheel(1)))

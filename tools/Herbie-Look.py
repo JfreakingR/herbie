@@ -17,9 +17,9 @@ updated after every step that is sent. If anything turns the wheel without
 this tool (a hand, the factory app, a restart that re-centres it), or a step
 comes back AMBIGUOUS, point him forward again and run `home`.
 
-Each step sends the wheel "off" then "on" (it is a toggle, and a bare "on"
-only moved it every other time), then waits HERBIE_NECK_PAUSE seconds
-(default 4) for the move to finish.
+Each step is two wheel frames: the wheel only visibly moves on every other
+one. Every frame is followed by HERBIE_NECK_PAUSE seconds (default 5), as
+frames sent too close together are dropped. About 10 s per 40 degrees.
 
 Uses the same link as Send-Herbie-Frame.py (USB by default,
 HERBIE_ADB_TARGET for Wi-Fi) and its exactly-once write per step.
@@ -38,12 +38,12 @@ _spec.loader.exec_module(sender)
 vava = sender.vava
 
 STATE = Path.home() / ".herbie" / "neck_step.txt"
-# The wheel is a toggle: an "on" frame after a move only switches it off, so
-# repeated "on" frames moved it every OTHER time, at 6.5 s and at 14 s spacing
-# alike (2026-09-27). Each step therefore sends off, then on. The pause lets
-# the move finish; override with HERBIE_NECK_PAUSE (seconds).
-OFF_ON_GAP_S = 0.5
-STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "4"))
+# The wheel makes a visible move on every OTHER frame (2026-09-27: at 6.5 s
+# and 14 s spacing, and with an "off" frame between), so each 40-degree step
+# is NECK_FRAMES_PER_STEP frames. Frames too close together are dropped
+# (~2-3 s apart lost most of them), so every frame is followed by a pause.
+# Override with HERBIE_NECK_PAUSE (seconds).
+STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "5"))
 
 
 def read_step():
@@ -63,7 +63,7 @@ def facing(step):
 
 
 def turn(steps, current):
-    """Send `steps` wheel frames one at a time. Returns 0 on success."""
+    """Turn `steps` 40-degree steps, NECK_FRAMES_PER_STEP frames each. 0 = ok."""
     if steps == 0:
         print("already there -", facing(current))
         return 0
@@ -73,29 +73,27 @@ def turn(steps, current):
         return 1
     sequence = int(time.time()) & 0xFF
     for i in range(steps):
-        sequence = sequence % 0xFF + 1          # 1..255, never 0
-        off = vava.to_wire(vava.treat_wheel_off(sequence))
-        print(f"step {i + 1}/{steps}  off 0x{sequence:02X}  ", end="")
-        result = sender.send_frame(target, off, show_log=False)
-        if result == 0:
-            # "off" moves nothing, so a failed one just stops here safely.
-            time.sleep(OFF_ON_GAP_S)
-            sequence = sequence % 0xFF + 1
+        for f in range(vava.NECK_FRAMES_PER_STEP):
+            sequence = sequence % 0xFF + 1      # 1..255, never 0
             frame = vava.to_wire(vava.treat_wheel(sequence))
-            print(f"         on 0x{sequence:02X}  ", end="")
+            print(f"step {i + 1}/{steps}  frame {f + 1}/{vava.NECK_FRAMES_PER_STEP}"
+                  f"  seq 0x{sequence:02X}  ", end="")
             result = sender.send_frame(target, frame, show_log=False)
+            if result != 0:
+                break
+            if not (i + 1 == steps and f + 1 == vava.NECK_FRAMES_PER_STEP):
+                time.sleep(STEP_PAUSE_S)
         if result != 0:
             if result == 3:
-                print("Stopped. That step may or may not have happened, so his "
+                print("Stopped. That frame may or may not have happened, so his "
                       "heading is unknown: face him forward and run `home`.")
             else:
-                print("Stopped before sending that step.")
+                print("Stopped before sending that frame. If it was frame 2 of a "
+                      "step, the heading may be off: face him forward and run `home`.")
             print("last known:", facing(current))
             return result
         current = (current + 1) % vava.NECK_STEPS_PER_TURN
         write_step(current)
-        if i + 1 < steps:
-            time.sleep(STEP_PAUSE_S)
     print("now", facing(current))
     return 0
 
