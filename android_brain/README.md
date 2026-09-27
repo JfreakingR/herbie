@@ -15,6 +15,12 @@ they are large and re-downloadable.
 - Voice (bridge 0.3.0): `POST /v1/speak` renders Android TTS to a file and plays it as media; `POST /v1/speak/stop`
 - Ears: on-device speech recognition; asleep until "Herbie", awake until "go to sleep"/"stop listening"; utterances go to the phone brain's `/v1/chat` on `127.0.0.1:8765` (provision with `--es brain_token`)
 - Android lifecycle: sticky foreground service plus `BOOT_COMPLETED` receiver
+- Hearing after a restart: Android 14+ never gives the microphone to a service
+  started from the background, so a service started straight from the boot
+  receiver has no ears. With **Appear on top** granted (Settings > Apps > Herbie
+  Brain > Appear on top), the boot receiver opens the app for a moment instead;
+  the service starts from the foreground with the microphone and the screen
+  steps back. Without it, opening the app once after a restart restores ears.
 - Motion: no motor API, `motor_authority=false`, `safe_motion_state=STOP`
 
 The Qwen3 1.7B file is from the official `Qwen/Qwen3-1.7B-GGUF` repository at

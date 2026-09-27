@@ -40,6 +40,10 @@ class HerbieModelService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Started at boot the service has no microphone (Android 14+ refuses it
+        // from the background) and so no ears. A later start from the app in
+        // the foreground is allowed the microphone: take it then.
+        if (ears == null && voice != null && startInForeground()) startEars()
         startModelIfNeeded()
         return START_STICKY
     }

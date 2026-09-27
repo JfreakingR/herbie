@@ -97,6 +97,9 @@ class MainActivity : AppCompatActivity() {
             userInputEt.isEnabled = false
             userActionFab.isEnabled = false
             benchmarkButton.isEnabled = false
+            // Opened by the boot receiver only so the service could start with
+            // the microphone: get out of the way again.
+            if (intent.getBooleanExtra(EXTRA_FROM_BOOT, false)) moveTaskToBack(true)
             return
         }
 
@@ -381,6 +384,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        const val EXTRA_FROM_BOOT = "herbie_from_boot"
         private val TAG = MainActivity::class.java.simpleName
         private const val DIRECTORY_MODELS = "models"
         private const val FILE_EXTENSION_GGUF = ".gguf"
