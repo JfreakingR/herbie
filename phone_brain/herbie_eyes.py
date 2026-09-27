@@ -29,7 +29,8 @@ EYES_SKILL = (
     "in your reply, for example 'Let me have a look. [see]'. A photo is taken "
     "and you describe it straight after; if you also turn with [look N], the "
     "photo waits until you have finished turning. Use it when someone asks what "
-    "you can see, or asks you to look at something; at most one per reply. "
+    "you can see, asks you to look at something, or wants help with something "
+    "in front of you, like a video game or puzzle on the TV; at most one per reply. "
     "Only describe what is actually in a photo you were given."
 )
 NO_SIGHT = (
@@ -39,7 +40,10 @@ NO_SIGHT = (
 SEEN_PROMPT = (
     "This is the photo you just took with your own camera{where}. Answer what "
     "was asked, from what is really in the picture, briefly and in your own "
-    "voice. If it is too dark or blurry to tell, say so. Asked: {question}"
+    "voice. If it is too dark or blurry to tell, say so. If it is a game or "
+    "puzzle someone is stuck on, read the screen carefully and give the next "
+    "useful hint, not the whole solution, unless they ask for the answer. "
+    "Asked: {question}"
 )
 
 _SEE = re.compile(r"\[\s*see\s*\]", re.IGNORECASE)
@@ -65,6 +69,30 @@ def extract_see(text: str) -> tuple[str, bool]:
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r" +([,.!?;:])", r"\1", cleaned).strip()
     return cleaned, True
+
+
+# Help with a game on the TV: a game word plus a help/question word. Once he
+# is helping, follow-up questions look again too (see the phone brain).
+_GAME = re.compile(
+    r"\b(puzzles?|levels?|games?|screens?|tv|telly|boss|riddles?|maze|minecraft|zelda|mario)\b",
+    re.IGNORECASE,
+)
+_HELP = re.compile(
+    r"\b(help|how|what|where|which|stuck|solve|should|next|hint|answer|figure)\b",
+    re.IGNORECASE,
+)
+_DONE_HELPING = re.compile(
+    r"\b(thanks|thank you|bye|that'?s all|never ?mind|we got it|got it|stop helping|done)\b",
+    re.IGNORECASE,
+)
+
+
+def asks_for_game_help(message: str) -> bool:
+    return bool(_GAME.search(message) and _HELP.search(message))
+
+
+def done_helping(message: str) -> bool:
+    return bool(_DONE_HELPING.search(message))
 
 
 def asks_to_see(message: str) -> bool:

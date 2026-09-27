@@ -27,10 +27,14 @@ import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.14.0"
+SERVICE_VERSION = "0.14.1"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
 NECK = herbie_neck.NeckState()
 DRIVE = herbie_drive.DriveState()
+# While he is helping with a game on the TV, every follow-up looks again, until
+# this long after the last look or until someone says they're done.
+GAME_HELP_S = 180.0
+GAME_HELP = {"until": 0.0}
 TOKEN_PATH = Path(
     os.environ.get(
         "HERBIE_TOKEN_FILE",
@@ -447,9 +451,14 @@ class PalHandler(BaseHTTPRequestHandler):
             if moves and drive_ok:
                 response["drive"] = {"moves": moves, "request_id": DRIVE.request(moves)}
             question = request["message"].strip()
-            if eyes_ok and not see and herbie_eyes.asks_to_see(question):
-                # Asked plainly to look: look, and drop a reply that guessed
-                # without a photo.
+            now = time.monotonic()
+            game_help = herbie_eyes.asks_for_game_help(question) or (
+                now < GAME_HELP["until"] and not herbie_eyes.done_helping(question)
+            )
+            GAME_HELP["until"] = now + GAME_HELP_S if eyes_ok and game_help else 0.0
+            if eyes_ok and not see and (herbie_eyes.asks_to_see(question) or game_help):
+                # Asked plainly to look (or helping with a game): look, and
+                # drop a reply that guessed without a photo.
                 see = True
                 response["text"] = "Let me have a look." if look is None else response["text"]
             if look is not None and neck_line:

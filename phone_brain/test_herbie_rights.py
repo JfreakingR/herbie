@@ -358,6 +358,32 @@ class ApiTokenTests(unittest.TestCase):
             self._post("/v1/drive/claim", {})
         self.assertEqual(err.exception.code, 401)
 
+    def test_game_help_keeps_looking_at_follow_ups_until_done(self):
+        from unittest import mock
+
+        self.brain.GAME_HELP["until"] = 0.0
+        token = "test-token-value"
+
+        def looks(message):
+            with mock.patch.object(self.brain.herbie_chat, "route_chat",
+                                   return_value={"text": "Hmm.", "brain": "cloud"}), \
+                    mock.patch.object(self.brain.herbie_cloud, "load_config",
+                                      return_value={"key": "k" * 30, "model": "m"}), \
+                    mock.patch.object(self.brain.herbie_eyes, "look_now",
+                                      return_value=b"\xff\xd8jpeg") as camera, \
+                    mock.patch.object(self.brain.herbie_cloud, "chat",
+                                      return_value={"text": "Push the red block."}), \
+                    mock.patch.object(self.brain.herbie_recall, "learn_in_background"), \
+                    mock.patch.object(self.brain.herbie_recall, "save_dialogue"):
+                self._post("/v1/chat", {"message": message}, token).read()
+                return camera.call_count
+
+        self.assertEqual(looks("tell me a joke"), 0)
+        self.assertEqual(looks("Herbie, help Zach with this puzzle"), 1)
+        self.assertEqual(looks("and now"), 1)             # still helping
+        self.assertEqual(looks("thanks, we got it"), 0)   # done
+        self.assertEqual(looks("and now"), 0)
+
     def test_see_answers_from_a_photo_and_waits_for_a_turn(self):
         from unittest import mock
         import herbie_neck

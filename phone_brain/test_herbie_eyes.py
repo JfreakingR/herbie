@@ -31,6 +31,21 @@ class AsksToSeeTests(unittest.TestCase):
             self.assertFalse(eyes.asks_to_see(message), message)
 
 
+class GameHelpTests(unittest.TestCase):
+    def test_game_help_requests(self):
+        for message in ("Herbie, help Zach with this puzzle", "how do we solve this level",
+                        "what should he do in this game", "we're stuck on the boss"):
+            self.assertTrue(eyes.asks_for_game_help(message), message)
+
+    def test_not_game_help(self):
+        for message in ("what's for dinner", "I love games", "hello"):
+            self.assertFalse(eyes.asks_for_game_help(message), message)
+
+    def test_done_helping(self):
+        self.assertTrue(eyes.done_helping("thanks Herbie, we got it"))
+        self.assertFalse(eyes.done_helping("what about the red door"))
+
+
 class LookNowTests(unittest.TestCase):
     def open_camera(self, reply=None, error=None, permitted=True):
         with mock.patch.object(eyes, "camera_permitted", return_value=permitted), \
