@@ -30,9 +30,23 @@ $Release = Join-Path $Root 'android_brain\release'
 $Adb = Join-Path $Root '.tools\platform-tools\adb.exe'
 $Package = 'com.prismml.herbiebrain'
 
-if (-not (Test-Path -LiteralPath (Join-Path $Project 'gradlew.bat'))) {
+if (-not (Test-Path -LiteralPath (Join-Path $Project 'app\src\main'))) {
     throw "No Android project at $Project. It is the upstream checkout the last build used (see android_brain\README.md)."
 }
+# The project's own wrapper if it has one; otherwise a Gradle unpacked with the
+# portable toolchain (this checkout was built that way, without gradlew.bat).
+$Gradle = Join-Path $Project 'gradlew.bat'
+if (-not (Test-Path -LiteralPath $Gradle)) {
+    $found = Get-ChildItem -LiteralPath $BuildRoot -Filter gradle.bat -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\bin\\gradle\.bat$' } | Select-Object -First 1
+    if (-not $found) {
+        $found = Get-ChildItem -LiteralPath "$env:USERPROFILE\.gradle\wrapper\dists" -Filter gradle.bat -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\bin\\gradle\.bat$' } | Sort-Object FullName -Descending | Select-Object -First 1
+    }
+    if (-not $found) { throw "No gradlew.bat in $Project and no Gradle under $BuildRoot or ~\.gradle. Tell Claude." }
+    $Gradle = $found.FullName
+}
+Write-Host "Using Gradle: $Gradle"
 $java = Get-ChildItem -LiteralPath (Join-Path $BuildRoot 'jdk-17') -Filter java.exe -Recurse -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -match '\\bin\\java\.exe$' } | Select-Object -First 1
 if (-not $java) { throw "No JDK under $BuildRoot. Run tools\Install-Herbie-Android-BuildTools.ps1 first." }
@@ -49,7 +63,7 @@ Push-Location $Project
 try {
     # --no-daemon and no file-system watching: both stalled the earlier build
     # on this PC (Gradle probed an empty removable drive and hung).
-    & .\gradlew.bat ':app:assembleDebug' --no-daemon --console=plain '-Dorg.gradle.vfs.watch=false'
+    & $Gradle ':app:assembleDebug' --no-daemon --console=plain '-Dorg.gradle.vfs.watch=false'
     if ($LASTEXITCODE -ne 0) { throw "Build failed (exit $LASTEXITCODE). The first error above is the one to fix." }
 } finally {
     Pop-Location
