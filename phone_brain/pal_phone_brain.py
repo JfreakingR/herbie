@@ -20,11 +20,13 @@ import herbie_autonomic
 import herbie_chat
 import herbie_recall
 import herbie_memory
+import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.11.0"
+SERVICE_VERSION = "0.12.0"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
+NECK = herbie_neck.NeckState()
 TOKEN_PATH = Path(
     os.environ.get(
         "HERBIE_TOKEN_FILE",
@@ -236,6 +238,9 @@ class PalHandler(BaseHTTPRequestHandler):
             )
             self.send_json(200, params)
             return
+        if parsed.path == "/v1/neck":
+            self.send_json(200, NECK.snapshot())
+            return
         if parsed.path == "/v1/urge":
             # Peek without claiming, so a poller cannot silently swallow one.
             state = herbie_memory.autonomic_snapshot()
@@ -294,6 +299,7 @@ class PalHandler(BaseHTTPRequestHandler):
             "/v1/urge",
             "/v1/autonomic",
             "/v1/speak/stop",
+            "/v1/neck/claim",
         }:
             self.send_json(404, {"error": "not_found"})
             return
@@ -378,6 +384,13 @@ class PalHandler(BaseHTTPRequestHandler):
                     f"{turn['role'].title()}: {turn['content'][:400]}"
                     for turn in recent_dialogue
                 )
+            # The neck is offered only while the computer's controller is
+            # checking in, and not in privacy mode (the camera is off then).
+            neck_line = NECK.context_line()
+            if neck_line and herbie_memory.privacy_snapshot().get("privacy_mode"):
+                neck_line = None
+            if neck_line:
+                context_lines.append(neck_line)
             context = "\n".join(context_lines)
             try:
                 response = herbie_chat.route_chat(
@@ -386,6 +399,7 @@ class PalHandler(BaseHTTPRequestHandler):
                     computer_url=computer_url,
                     computer_token=API_TOKEN,
                     context=context,
+                    skills=herbie_neck.NECK_SKILL if neck_line else "",
                 )
             except ValueError as exc:
                 self.send_json(400, {"error": str(exc)})
@@ -393,6 +407,14 @@ class PalHandler(BaseHTTPRequestHandler):
             except herbie_chat.ChatUnavailable as exc:
                 self.send_json(503, {"error": str(exc), "coordination": coordination})
                 return
+            # Every brain's [look N] tags are removed whatever happens, so
+            # they are never spoken or remembered; only a live neck acts on one.
+            response["text"], look = herbie_neck.extract_look(response["text"])
+            if look is not None and neck_line:
+                response["neck"] = {
+                    "look": look,
+                    "request_id": NECK.request(look),
+                }
             with CONVERSATION_LOCK:
                 RECENT_DIALOGUE.append(
                     {"role": "user", "content": request["message"].strip()}
@@ -405,6 +427,17 @@ class PalHandler(BaseHTTPRequestHandler):
                 request["message"].strip(), response["text"].strip()
             )
             herbie_autonomic.note_interaction()
+        elif self.path == "/v1/neck/claim":
+            # The computer's neck controller checks in: it reports where the
+            # head faces and whether it is mid-turn, and takes any pending look.
+            try:
+                claimed = NECK.claim(
+                    request.get("facing"), request.get("busy", False)
+                )
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+                return
+            response = {"look": claimed, "motor_authority": False}
         elif self.path == "/v1/remember":
             try:
                 response = herbie_memory.remember(request)

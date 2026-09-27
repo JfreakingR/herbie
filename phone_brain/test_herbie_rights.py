@@ -272,6 +272,47 @@ class ApiTokenTests(unittest.TestCase):
             req.add_header("Authorization", f"Bearer {token}")
         return urllib.request.urlopen(req, timeout=5)
 
+    def test_brain_can_ask_to_look_only_while_the_neck_is_live(self):
+        from unittest import mock
+        import herbie_neck
+
+        self.brain.NECK = herbie_neck.NeckState()
+        token = "test-token-value"
+        seen = []
+
+        def fake_route(payload, **kwargs):
+            seen.append(kwargs["skills"])
+            return {"text": "[look 90] Let me see.", "brain": "cloud"}
+
+        def chat():
+            with mock.patch.object(self.brain.herbie_chat, "route_chat", side_effect=fake_route), \
+                    mock.patch.object(self.brain.herbie_recall, "learn_in_background"), \
+                    mock.patch.object(self.brain.herbie_recall, "save_dialogue"):
+                return json.loads(self._post("/v1/chat", {"message": "what's behind you?"}, token).read())
+
+        # No controller has checked in: the tag is still stripped, nothing queued.
+        body = chat()
+        self.assertEqual(body["text"], "Let me see.")
+        self.assertNotIn("neck", body)
+        self.assertEqual(seen[-1], "")
+
+        # The PC controller checks in, facing forward, with nothing to do.
+        claim = json.loads(self._post("/v1/neck/claim", {"facing": 0, "busy": False}, token).read())
+        self.assertIsNone(claim["look"])
+
+        body = chat()
+        self.assertEqual(body["text"], "Let me see.")
+        self.assertEqual(body["neck"]["look"], 90)
+        self.assertEqual(seen[-1], herbie_neck.NECK_SKILL)
+
+        claim = json.loads(self._post("/v1/neck/claim", {"facing": 0}, token).read())
+        self.assertEqual(claim["look"]["degrees"], 90)
+        self.assertFalse(claim["motor_authority"])
+
+        with self.assertRaises(urllib.error.HTTPError) as err:
+            self._post("/v1/neck/claim", {"facing": 0})
+        self.assertEqual(err.exception.code, 401)
+
     def test_reads_require_a_token(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self._get("/v1/self")

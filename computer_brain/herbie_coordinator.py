@@ -2,7 +2,12 @@
 """Computer-primary lease coordinator for Herbie.
 
 The Galaxy remains the only memory writer and becomes active automatically when
-this process stops renewing its short lease. This process has no motor API.
+this process stops renewing its short lease.
+
+With --neck it also drives Herbie's neck (the camera wheel on his head): each
+cycle it tells the phone which way the head faces and takes any look a brain
+asked for, then turns the wheel through tools/Herbie-Look.py. That is the only
+actuator it can reach. The wheels stay off - there is no drive path here.
 """
 
 from __future__ import annotations
@@ -13,7 +18,9 @@ import ipaddress
 import json
 import os
 import socket
+import importlib.util
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -26,6 +33,7 @@ DEFAULT_BRAIN_PORT = 18766
 DEFAULT_INTERVAL = 5.0
 DEFAULT_LEASE = 15
 SOURCE = "windows-computer"
+LOOK_TOOL = Path(__file__).resolve().parent.parent / "tools" / "Herbie-Look.py"
 
 
 def private_directory() -> Path:
@@ -175,6 +183,64 @@ def renew_lease(
     )
 
 
+class NeckController:
+    """Turns the neck for the phone, one look at a time, in a background thread.
+
+    A look takes up to a couple of minutes, so it never blocks lease renewal.
+    While one is running the controller reports busy and the phone keeps any
+    newer request until it is free.
+    """
+
+    def __init__(self, look_module: Any | None = None) -> None:
+        self._look = look_module
+        self._thread: threading.Thread | None = None
+
+    @property
+    def look(self) -> Any:
+        if self._look is None:
+            spec = importlib.util.spec_from_file_location("herbie_look", LOOK_TOOL)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self._look = module
+        return self._look
+
+    def busy(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def facing(self) -> float | None:
+        step = self.look.read_step()
+        if step is None:
+            return None
+        return step * self.look.vava.NECK_DEGREES_PER_STEP
+
+    def poll(self, endpoint: str, token: str) -> int | None:
+        """Check in with the phone; start a turn if a look was waiting."""
+        busy = self.busy()
+        facing = self.facing()
+        response = request_json(
+            endpoint,
+            "/v1/neck/claim",
+            token=token,
+            payload={"facing": facing, "busy": busy},
+            timeout=4.0,
+        )
+        claimed = response.get("look")
+        if not claimed or busy:
+            return None
+        degrees = int(claimed["degrees"])
+        if facing is None:
+            print("neck: asked to look but heading unknown - face him forward "
+                  "and run `python tools/Herbie-Look.py home`", file=sys.stderr, flush=True)
+            return None
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} neck: look {degrees}", flush=True)
+        self._thread = threading.Thread(
+            target=self.look.main, args=(["herbie-look", str(degrees)],),
+            name="herbie-neck", daemon=True,
+        )
+        self._thread.start()
+        return degrees
+
+
 def run_once(
     endpoint: str | None,
     lease_seconds: int,
@@ -199,6 +265,7 @@ def run_forever(
     interval: float,
     lease_seconds: int,
     brain_url: str | None = None,
+    neck: NeckController | None = None,
 ) -> None:
     token = load_token()
     current = endpoint
@@ -207,6 +274,12 @@ def run_forever(
             current = discover_phone(current)
             response = renew_lease(current, token, lease_seconds, brain_url)
             coordination = response["coordination"]
+            if neck is not None:
+                try:
+                    neck.poll(current, token)
+                except Exception as exc:
+                    # A neck hiccup must never cost the lease.
+                    print(f"neck: check-in failed: {exc}", file=sys.stderr, flush=True)
             print(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} connected={current} "
                 f"active={coordination['active_brain']} fallback=ready",
@@ -238,6 +311,11 @@ def main() -> int:
         "--brain-url",
         help="private-LAN PC inference base URL; defaults to this PC and port 18766",
     )
+    parser.add_argument(
+        "--neck",
+        action="store_true",
+        help="let Herbie's brains turn his neck (the camera wheel) through this PC",
+    )
     args = parser.parse_args()
     if not 1.0 <= args.interval <= 30.0:
         parser.error("--interval must be between 1 and 30 seconds")
@@ -247,7 +325,10 @@ def main() -> int:
     if args.once:
         print(json.dumps(run_once(args.phone, args.lease, args.brain_url), indent=2))
         return 0
-    run_forever(args.phone, args.interval, args.lease, args.brain_url)
+    neck = NeckController() if args.neck else None
+    if neck is not None:
+        print(f"neck: enabled, facing {neck.facing()}", flush=True)
+    run_forever(args.phone, args.interval, args.lease, args.brain_url, neck)
     return 0
 
 

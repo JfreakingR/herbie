@@ -21,8 +21,11 @@ class PCBrainTests(unittest.TestCase):
             brain.validate_chat_request(
                 {"message": "hello", "context": "memory", "max_tokens": 64}
             ),
-            ("hello", "memory", 64),
+            ("hello", "memory", 64, ""),
         )
+        for value in (5, "x" * 1501):
+            with self.assertRaises(ValueError):
+                brain.validate_chat_request({"message": "hi", "skills": value})
         for value in (0, 257, True, "64"):
             with self.assertRaises(ValueError):
                 brain.validate_chat_request({"message": "hello", "max_tokens": value})
@@ -40,6 +43,15 @@ class PCBrainTests(unittest.TestCase):
         self.assertEqual(payload["options"]["num_predict"], 32)
         self.assertFalse(result["motor_authority"])
         self.assertEqual(result["safe_motion_state"], "STOP")
+
+    def test_skills_reach_the_system_prompt(self):
+        response = mock.MagicMock()
+        response.read.return_value = json.dumps({"message": {"content": "ok"}}).encode()
+        response.__enter__.return_value = response
+        with mock.patch("urllib.request.urlopen", return_value=response) as opened:
+            brain.ollama_chat("hi", "", 32, skills="You can turn your head.")
+        system = json.loads(opened.call_args.args[0].data)["messages"][0]["content"]
+        self.assertIn("You can turn your head.", system)
 
     def _ps(self, names):
         response = mock.MagicMock()

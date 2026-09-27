@@ -89,12 +89,17 @@ def post_local_chat(
     context: str,
     max_tokens: int,
     timeout: float,
+    skills: str = "",
 ) -> dict[str, Any]:
     endpoint = validate_local_url(endpoint)
-    body = json.dumps(
-        {"message": message, "context": context[:MAX_CONTEXT_CHARS], "max_tokens": max_tokens},
-        separators=(",", ":"),
-    ).encode("utf-8")
+    payload: dict[str, Any] = {
+        "message": message,
+        "context": context[:MAX_CONTEXT_CHARS],
+        "max_tokens": max_tokens,
+    }
+    if skills:
+        payload["skills"] = skills
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
         endpoint + "/v1/chat",
         data=body,
@@ -165,13 +170,17 @@ def route_chat(
     computer_url: str | None,
     computer_token: str,
     context: str,
+    skills: str = "",
 ) -> dict[str, Any]:
+    """Cloud, then computer, then phone. `skills` (abilities available right
+    now, such as the neck) goes to the cloud and computer brains; the small
+    phone-local model does not get it."""
     message, max_tokens = validate_request(payload)
     primary_error = None
     # Cloud first when provisioned and online; any failure or refusal falls
     # through, so Herbie keeps talking with no network.
     try:
-        return herbie_cloud.chat(message, context, max_tokens)
+        return herbie_cloud.chat(message, context, max_tokens, skills=skills)
     except herbie_cloud.CloudUnavailable:
         pass
     if computer_available and computer_url:
@@ -183,6 +192,7 @@ def route_chat(
                 context,
                 max_tokens,
                 timeout=180.0,
+                skills=skills,
             )
         except ChatUnavailable as exc:
             primary_error = str(exc)

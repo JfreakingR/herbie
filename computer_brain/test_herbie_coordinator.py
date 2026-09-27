@@ -44,5 +44,52 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual(result["safe_motion_state"], "STOP")
 
 
+class FakeLook:
+    class vava:
+        NECK_DEGREES_PER_STEP = 22.5
+
+    def __init__(self, step):
+        self.step = step
+        self.calls = []
+
+    def read_step(self):
+        return self.step
+
+    def main(self, argv):
+        self.calls.append(argv)
+        return 0
+
+
+class NeckControllerTests(unittest.TestCase):
+    def poll(self, look, reply):
+        controller = coordinator.NeckController(look)
+        with mock.patch.object(coordinator, "request_json", return_value=reply) as sent:
+            result = controller.poll("http://phone:8765", "t")
+        if controller._thread is not None:
+            controller._thread.join(1)
+        return result, sent
+
+    def test_checks_in_with_heading_and_runs_a_claimed_look(self):
+        look = FakeLook(step=2)
+        result, sent = self.poll(look, {"look": {"id": 1, "degrees": 90}})
+        self.assertEqual(result, 90)
+        self.assertEqual(sent.call_args.args[1], "/v1/neck/claim")
+        self.assertEqual(sent.call_args.kwargs["payload"], {"facing": 45.0, "busy": False})
+        self.assertEqual(look.calls, [["herbie-look", "90"]])
+
+    def test_nothing_waiting_moves_nothing(self):
+        look = FakeLook(step=0)
+        result, _ = self.poll(look, {"look": None})
+        self.assertIsNone(result)
+        self.assertEqual(look.calls, [])
+
+    def test_unknown_heading_refuses_to_guess(self):
+        look = FakeLook(step=None)
+        result, sent = self.poll(look, {"look": {"id": 1, "degrees": 90}})
+        self.assertIsNone(result)
+        self.assertEqual(look.calls, [])
+        self.assertIsNone(sent.call_args.kwargs["payload"]["facing"])
+
+
 if __name__ == "__main__":
     unittest.main()

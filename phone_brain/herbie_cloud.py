@@ -78,8 +78,14 @@ def load_config() -> dict[str, str] | None:
     }
 
 
-def build_request(model: str, message: str, context: str, max_tokens: int) -> dict[str, Any]:
+def build_request(
+    model: str, message: str, context: str, max_tokens: int, skills: str = ""
+) -> dict[str, Any]:
     system = PERSONA
+    if skills:
+        # Abilities the phone vouches for right now (the neck), stated as
+        # instructions - unlike the context below, which is only data.
+        system += "\n\n" + skills
     if context:
         system += "\n\nPhone-owned context:\n" + context
     return {
@@ -109,13 +115,17 @@ def parse_reply(result: Any) -> str:
 
 
 def chat(
-    message: str, context: str, max_tokens: int, timeout: float = TIMEOUT_SECONDS
+    message: str,
+    context: str,
+    max_tokens: int,
+    timeout: float = TIMEOUT_SECONDS,
+    skills: str = "",
 ) -> dict[str, Any]:
     config = load_config()
     if config is None:
         raise CloudUnavailable("cloud_not_provisioned")
     body = json.dumps(
-        build_request(config["model"], message, context, max_tokens),
+        build_request(config["model"], message, context, max_tokens, skills),
         separators=(",", ":"),
     ).encode("utf-8")
     request = urllib.request.Request(

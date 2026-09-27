@@ -2,7 +2,7 @@
 
 This is Herbie's safety-bounded core service on the Galaxy S21 Ultra. It uses only Python's standard library and listens on the phone's loopback interface. Windows or a future local bridge reaches it through an authenticated ADB forward.
 
-Version 0.11 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router. It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
+Version 0.12 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router, and a neck the brains can turn through the PC (see Neck below). It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
 
 ## Authentication
 
@@ -34,6 +34,7 @@ Read:
 - `GET /v1/mood` — circadian energy, drives, valence/arousal, time since interaction, whether he is asleep.
 - `GET /v1/urge` — peek at a pending impulse without claiming it.
 - `GET /v1/voice` — how he would sound right now, without speaking.
+- `GET /v1/neck` — whether a neck controller is live, which way the head faces, and any look waiting.
 
 Write:
 
@@ -45,6 +46,7 @@ Write:
 - `POST /v1/privacy` — `{"privacy_mode":true}` disables camera and microphone.
 - `POST /v1/speak` — speak through Android's local TTS. Prosody comes from current mood unless `pitch`/`rate` are given; `natural: false` disables the thinking pause and disfluencies.
 - `POST /v1/speak/stop` — interrupt whatever he is saying.
+- `POST /v1/neck/claim` — the PC's neck controller checks in (`facing`, `busy`) and takes a waiting look.
 - `POST /v1/interact` — mark engagement; discharges the drives it satisfies.
 - `POST /v1/urge` — claim a pending impulse. Speaks it aloud unless it is a silent night-time one.
 - `POST /v1/autonomic` — `{"enabled": false}` switches the inner life off.
@@ -143,3 +145,18 @@ python -m unittest -q test_herbie_memory test_herbie_rights test_herbie_autonomi
 74 tests: identity/safety invariants, memory persistence, bounded personality learning, invalid-trait rejection, expression and privacy persistence, owner memory rights, experience atomicity, search behaviour, end-to-end token enforcement over real HTTP, autonomic drift and habituation, voice prosody and imperfection, and the cost audit.
 
 `FtsMigrationTests` specifically covers memories that predate the FTS index. That path shipped broken once: the backfill guard counted `memories_fts`, which for an external content table reads through to the content table, so an entirely empty index looked fully built and search silently returned nothing. It now counts `memories_fts_docsize` and self-heals on next start.
+
+## Neck
+
+Herbie's head camera sits on the old treat wheel, which turns one way in
+22.5-degree steps. The wheel is driven from the Windows computer, the only
+machine with a link to the VAVA motor board, by the coordinator started with
+`--neck` (`tools\Start-Herbie-Coordinator.ps1 -Neck`).
+
+While that controller checks in, the cloud and computer brains are told they
+can turn their head by writing `[look N]` in a reply, and the context says
+which way the head faces. `herbie_neck.py` strips every such tag before a reply
+is stored or spoken, and queues the last one for the controller. With no
+controller, or in privacy mode, the skill is not offered and tags are simply
+dropped. The small phone-local model is not given the skill. Wheels remain
+under `motor_authority`, which stays off.
