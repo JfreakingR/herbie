@@ -132,6 +132,18 @@
       z-index: 4;
     }
     body.kiosk #caption { bottom: 18px; }
+
+    /* Glow look: lit block eyes on a dark screen. ?look=glow */
+    #glow { display: none; }
+    body.look-glow #face { display: none; }
+    body.look-glow #glow { display: inline; }
+    body.look-glow #screen {
+      background:
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse at 50% 45%, #0b1418 0%, #05080a 70%, #020304 100%);
+    }
+    body.look-glow #caption { color: #bff8ff; text-shadow: 0 0 8px rgba(63,240,255,0.6); }
+    body.look-glow #status-dot { color: rgba(191,248,255,0.55); }
   </style>
 </head>
 <body>
@@ -148,6 +160,24 @@
         <clipPath id="clip-mouth"><use href="#mouth-fill" /></clipPath>
         <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" /></filter>
       </defs>
+      <g id="glow">
+        <defs>
+          <filter id="halo" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="wide" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.1" result="near" />
+            <feMerge><feMergeNode in="wide" /><feMergeNode in="near" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <clipPath id="gclip-l"><path id="gcut-l" /></clipPath>
+          <clipPath id="gclip-r"><path id="gcut-r" /></clipPath>
+        </defs>
+        <g filter="url(#halo)">
+          <g clip-path="url(#gclip-l)"><rect id="geye-l" rx="7" /></g>
+          <g clip-path="url(#gclip-r)"><rect id="geye-r" rx="7" /></g>
+          <path id="gmouth" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
+          <ellipse id="gcheek-l" rx="8" ry="3.2" opacity="0" />
+          <ellipse id="gcheek-r" rx="8" ry="3.2" opacity="0" />
+        </g>
+      </g>
       <g id="face">
         <g id="eye-l" class="eye">
           <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
@@ -203,6 +233,7 @@
       <button id="btn-speak">Speak</button>
       <button data-idle="random">Idle move</button>
       <button id="btn-demo">Demo</button>
+      <button id="btn-look">Look</button>
     </div>
     <div class="row" id="moods"></div>
     <div class="row">
@@ -311,7 +342,25 @@
     excited: [6, 1, 0, 0.45],
   };
 
+  // Eye colour per mood in the glow look.
+  const GLOW_COLORS = {
+    angry: [255, 77, 94], love: [255, 122, 200], embarrassed: [255, 150, 190], sad: [96, 150, 255],
+    sorry: [110, 160, 255], worried: [140, 200, 255], sleepy: [40, 150, 165], excited: [120, 255, 230],
+    joy: [110, 255, 235],
+  };
+  const GLOW_DEFAULT = [63, 240, 255];
+  let savedLook = null;
+  try { savedLook = localStorage.getItem("herbie-look"); } catch (_) {}
+  let glowLook = (params.get("look") || savedLook) === "glow";
+  document.body.classList.toggle("look-glow", glowLook);
+  function toggleLook() {
+    glowLook = !glowLook;
+    document.body.classList.toggle("look-glow", glowLook);
+    try { localStorage.setItem("herbie-look", glowLook ? "glow" : "classic"); } catch (_) {}
+  }
+
   const state = {
+    glow: [...GLOW_DEFAULT],
     brow: 2, browTilt: 2, browAsym: 0, blush: 0.3,
     mode: "idle",
     emotion: "happy",
@@ -727,7 +776,59 @@
     return { line: "", fill, fillOp: 1, top: Math.min(cUp, ly, ry), bottom: cDn, halfWidth: w / 2 };
   }
 
-  function render() {
+  function renderGlow(t, smile, open, width, round, talking) {
+    const target = GLOW_COLORS[emotionName] || GLOW_DEFAULT;
+    for (let i = 0; i < 3; i++) state.glow[i] = lerp(state.glow[i], target[i], 0.08);
+    const flicker = 0.93 + Math.sin(t / 130) * 0.02 + Math.sin(t / 47) * 0.01;
+    const [r, g, b] = state.glow.map((c) => Math.round(c * (state.mode === "sleep" ? 0.55 : 1)));
+    const color = `rgb(${r},${g},${b})`;
+
+    const hw = 19 * state.eye, lidSlant = state.browTilt * 0.32;
+    const cover = clamp(state.lid * 0.5 + (state.browTilt < 0 ? -state.browTilt * 0.01 : 0), 0, 0.75);
+    const squint = talking ? 0 : clamp((smile - 0.78) * 2.2, 0, 0.45);
+    for (const [side, cx, blinkKey, sign] of [["l", 68, "blinkL", 1], ["r", 132, "blinkR", -1]]) {
+      const hh = 15 * state.eyeY * state[blinkKey];
+      const x = cx + state.lookX * 1.1, y = 92 + state.lookY * 0.9;
+      const rect = $("geye-" + side);
+      rect.setAttribute("x", (x - hw).toFixed(2));
+      rect.setAttribute("y", (y - hh).toFixed(2));
+      rect.setAttribute("width", (hw * 2).toFixed(2));
+      rect.setAttribute("height", Math.max(hh * 2, 1.2).toFixed(2));
+      rect.setAttribute("rx", Math.min(7, hh).toFixed(2));
+      rect.setAttribute("fill", color);
+      rect.setAttribute("opacity", flicker.toFixed(3));
+      // Lid line slants with the brows (inner end is toward the nose); a big
+      // smile cuts the bottom into an upturned arc.
+      const top = y - hh + cover * hh * 2;
+      const inner = top + lidSlant * -1, outer = top + lidSlant;
+      const [lx, rx2] = [x - hw - 2, x + hw + 2];
+      const leftY = sign > 0 ? outer : inner, rightY = sign > 0 ? inner : outer;
+      const bottom = y + hh + 2, arc = squint * hh * 2.6;
+      $("gcut-" + side).setAttribute("d",
+        `M ${lx} ${leftY} L ${rx2} ${rightY} L ${rx2} ${bottom} Q ${x} ${bottom - arc * 2} ${lx} ${bottom} Z`);
+    }
+
+    // Mouth: a lit line that opens into an outline while he talks.
+    const drawn = mouthPath({ open, width: width * 0.8, round, smile, skew: state.mouth.skew });
+    const mouth = $("gmouth");
+    mouth.setAttribute("d", drawn.fillOp ? drawn.fill : drawn.line);
+    mouth.setAttribute("stroke", color);
+    mouth.setAttribute("transform", "translate(0 6)");
+    mouth.setAttribute("opacity", (0.9 * flicker).toFixed(3));
+
+    for (const [side, cx] of [["l", 60], ["r", 140]]) {
+      const cheek = $("gcheek-" + side);
+      cheek.setAttribute("cx", cx + state.lookX * 1.1);
+      cheek.setAttribute("cy", 116 + state.lookY * 0.9);
+      cheek.setAttribute("fill", "rgb(255,110,170)");
+      cheek.setAttribute("opacity", (state.blush > 0.4 ? (state.blush - 0.4) * 1.4 : 0).toFixed(3));
+    }
+    const breath = 1 + Math.sin(state.breath) * 0.012;
+    $("glow").setAttribute("transform",
+      `translate(100 100) rotate(${state.tilt * 0.6}) scale(${breath}) translate(-100 -100)`);
+  }
+
+  function render(t = now()) {
     const e = EMOTIONS[emotionName] || EMOTIONS.neutral;
     const talking = state.talking || state.audioLevel > 0.03;
     const m = state.mouth;
@@ -736,6 +837,7 @@
     const width = talking ? lerp(m.width, visemeSmooth.width, 0.9) : m.width;
     const round = talking ? visemeSmooth.round : m.round;
 
+    if (glowLook) return renderGlow(t, smile, open, width, round, talking);
     const drawn = mouthPath({ open, width, round, smile, skew: m.skew });
     mouthLine.setAttribute("d", drawn.line || "M 0 0");
     mouthLine.setAttribute("opacity", drawn.fillOp ? 0 : 1);
@@ -817,7 +919,7 @@
     visemeSmooth.smile = lerp(visemeSmooth.smile, viseme.smile == null ? visemeSmooth.smile : viseme.smile, 0.22);
     state.jaw = lerp(state.jaw, visemeSmooth.open, 0.28);
     scheduleIdle(t);
-    render();
+    render(t);
     requestAnimationFrame(frame);
   }
 
@@ -960,6 +1062,7 @@
   });
   $("btn-speak").addEventListener("click", () => { if (!grokLive) api.speak($("say").value); });
   $("btn-demo").addEventListener("click", () => api.demo());
+  $("btn-look").addEventListener("click", toggleLook);
   $("say").addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || grokLive) return;
     api.speak($("say").value);
