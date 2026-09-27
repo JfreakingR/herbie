@@ -54,6 +54,9 @@ else { Problem 'Notifications are off for the app.' 'Settings > Apps > Bonsai (H
 $services = Shell "dumpsys activity services $Package"
 if ($services -match '(?:foregroundServiceType|types)=0x([0-9a-fA-F]+)') {
     $types = [Convert]::ToInt64($Matches[1], 16)
+    if ($types -band 0x40) { Ok 'His service holds the camera (he can see).' }
+    else { Problem 'His service does not hold the camera, so he cannot see.' `
+            'adb shell pm grant com.prismml.herbiebrain android.permission.CAMERA, then force stop and open the Herbie app.' }
     if ($types -band 0x80) { Ok 'His service holds the microphone.' }
     else {
         Problem 'His service is running WITHOUT the microphone, so he cannot hear.' `
@@ -71,7 +74,7 @@ if ($volume -match 'volume is (\d+) in range \[(\d+)\.\.(\d+)\]') {
 
 Write-Host ''
 Write-Host 'His own log (most recent last):'
-$log = (& $AdbPath -s $DeviceSerial logcat -d -s 'HerbieEars:*' 'HerbieVoice:*' 'HerbieModelService:*' 2>$null) |
+$log = (& $AdbPath -s $DeviceSerial logcat -d -s 'HerbieEars:*' 'HerbieVoice:*' 'HerbieModelService:*' 'HerbieModelBridge:*' 2>$null) |
     Where-Object { $_ -and $_ -notmatch '^-{5}' } | Select-Object -Last 25
 if (-not $log) {
     Write-Host '  (nothing logged - his service has not started since the log was cleared)' -ForegroundColor DarkYellow

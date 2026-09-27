@@ -18,13 +18,15 @@ from urllib.parse import parse_qs, urlsplit
 
 import herbie_autonomic
 import herbie_chat
+import herbie_cloud
+import herbie_eyes
 import herbie_recall
 import herbie_memory
 import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.12.0"
+SERVICE_VERSION = "0.13.0"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
 NECK = herbie_neck.NeckState()
 TOKEN_PATH = Path(
@@ -386,12 +388,21 @@ class PalHandler(BaseHTTPRequestHandler):
                 )
             # The neck is offered only while the computer's controller is
             # checking in, and not in privacy mode (the camera is off then).
-            neck_line = NECK.context_line()
-            if neck_line and herbie_memory.privacy_snapshot().get("privacy_mode"):
-                neck_line = None
+            # Sight needs the camera allowed and the cloud brain, the only one
+            # that can read a photo.
+            camera_ok = herbie_eyes.camera_permitted()
+            neck_line = NECK.context_line() if camera_ok else None
+            eyes_ok = camera_ok and herbie_cloud.load_config() is not None
             if neck_line:
                 context_lines.append(neck_line)
             context = "\n".join(context_lines)
+            skills = []
+            if neck_line:
+                skills.append(herbie_neck.NECK_SKILL)
+            if eyes_ok:
+                skills.append(herbie_eyes.EYES_SKILL)
+            elif neck_line:
+                skills.append(herbie_eyes.NO_SIGHT)
             try:
                 response = herbie_chat.route_chat(
                     request,
@@ -399,7 +410,7 @@ class PalHandler(BaseHTTPRequestHandler):
                     computer_url=computer_url,
                     computer_token=API_TOKEN,
                     context=context,
-                    skills=herbie_neck.NECK_SKILL if neck_line else "",
+                    skills="\n".join(skills),
                 )
             except ValueError as exc:
                 self.send_json(400, {"error": str(exc)})
@@ -410,11 +421,21 @@ class PalHandler(BaseHTTPRequestHandler):
             # Every brain's [look N] tags are removed whatever happens, so
             # they are never spoken or remembered; only a live neck acts on one.
             response["text"], look = herbie_neck.extract_look(response["text"])
+            response["text"], see = herbie_eyes.extract_see(response["text"])
+            question = request["message"].strip()
             if look is not None and neck_line:
+                # Turning and looking: the photo waits until the turn is done
+                # and he says what he sees then (see_after_turn).
                 response["neck"] = {
                     "look": look,
-                    "request_id": NECK.request(look),
+                    "request_id": NECK.request(
+                        look, see_question=question if see and eyes_ok else None
+                    ),
                 }
+            elif see and eyes_ok:
+                seen = describe_what_he_sees(question, context)
+                response["text"] = f"{response['text']} {seen}".strip()
+                response["saw"] = True
             with CONVERSATION_LOCK:
                 RECENT_DIALOGUE.append(
                     {"role": "user", "content": request["message"].strip()}
@@ -437,6 +458,9 @@ class PalHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self.send_json(400, {"error": str(exc)})
                 return
+            owed = NECK.pop_ready_see()
+            if owed is not None:
+                start_see_after_turn(owed)
             response = {"look": claimed, "motor_authority": False}
         elif self.path == "/v1/remember":
             try:
@@ -537,6 +561,48 @@ class PalHandler(BaseHTTPRequestHandler):
                 return
             response.update({"motor_authority": False, "safe_motion_state": "STOP"})
         self.send_json(200, response)
+
+
+def describe_what_he_sees(question: str, context: str,
+                          facing: float | None = None) -> str:
+    """Take one photo and have the cloud brain answer from it. Never raises."""
+    try:
+        jpeg = herbie_eyes.look_now()
+    except herbie_eyes.EyesUnavailable as exc:
+        print(f"Eyes: no photo ({exc})", flush=True)
+        return "I tried to look, but my camera isn't working right now."
+    try:
+        reply = herbie_cloud.chat(
+            herbie_eyes.seen_prompt(question, facing), context, 200, image=jpeg
+        )
+    except herbie_cloud.CloudUnavailable as exc:
+        print(f"Eyes: cloud could not look ({exc})", flush=True)
+        return "I took a look, but I can't make sense of it right now."
+    finally:
+        del jpeg                     # the photo is never kept
+    text, _ = herbie_neck.extract_look(reply.get("text", ""))
+    text, _ = herbie_eyes.extract_see(text)
+    return text or "I looked, but I'm not sure what I'm seeing."
+
+
+def see_after_turn(owed: dict[str, Any]) -> None:
+    """A turn with [see] has finished: look, then say what is there."""
+    identity = herbie_memory.self_snapshot()
+    context = f"Identity: {identity.get('name', 'Herbie')}."
+    text = describe_what_he_sees(owed["question"], context, owed.get("facing"))
+    with CONVERSATION_LOCK:
+        RECENT_DIALOGUE.append({"role": "assistant", "content": text})
+        herbie_recall.save_dialogue(list(RECENT_DIALOGUE))
+    try:
+        herbie_voice.speak({"text": text[:900]})
+    except (ValueError, RuntimeError) as exc:
+        print(f"Eyes: could not say what he saw ({exc})", flush=True)
+
+
+def start_see_after_turn(owed: dict[str, Any]) -> None:
+    threading.Thread(
+        target=see_after_turn, args=(owed,), name="herbie-see-after-turn", daemon=True
+    ).start()
 
 
 def main() -> None:

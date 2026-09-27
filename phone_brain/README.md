@@ -2,7 +2,7 @@
 
 This is Herbie's safety-bounded core service on the Galaxy S21 Ultra. It uses only Python's standard library and listens on the phone's loopback interface. Windows or a future local bridge reaches it through an authenticated ADB forward.
 
-Version 0.12 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router, and a neck the brains can turn through the PC (see Neck below). It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
+Version 0.13 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router, and a neck the brains can turn through the PC (see Neck below). It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
 
 ## Authentication
 
@@ -160,3 +160,15 @@ is stored or spoken, and queues the last one for the controller. With no
 controller, or in privacy mode, the skill is not offered and tags are simply
 dropped. The small phone-local model is not given the skill. Wheels remain
 under `motor_authority`, which stays off.
+
+## Eyes
+
+The Galaxy's back camera is Herbie's eye; the Herbie app takes the photo
+(`POST /v1/see` on its bridge) because only its foreground service may use the
+camera. `herbie_eyes.py` offers the cloud brain - the one that reads images - a
+`[see]` tag while the camera is allowed and privacy mode is off. On its own,
+`[see]` takes a photo at once and the answer from it is added to the same
+reply. With `[look N]`, the photo waits until the neck controller reports the
+turn finished, then he says what he sees out loud. Photos are held in memory
+for one request and never saved. Without sight, a live neck comes with an
+explicit "you cannot see" so he does not make things up.

@@ -26,6 +26,12 @@ they are large and re-downloadable.
   until someone unlocks the phone. Grant Appear on top from the PC with
   `adb shell appops set com.prismml.herbiebrain SYSTEM_ALERT_WINDOW allow`.
   Rebuild and install with `tools\Build-Herbie-Brain.ps1 -Install`.
+- Eyes (bridge 0.4.0): `POST /v1/see` takes one still with the back camera
+  (`HerbieEyes.kt`: a 1.2 s preview lets exposure settle, then a JPEG shrunk
+  to 1280 px) and returns it base64, in memory only. The service holds the
+  camera foreground type alongside the microphone, so it works in the
+  background and after a restart the same way. Grant the permission once:
+  `adb shell pm grant com.prismml.herbiebrain android.permission.CAMERA`.
 - Motion: no motor API, `motor_authority=false`, `safe_motion_state=STOP`
 
 The Qwen3 1.7B file is from the official `Qwen/Qwen3-1.7B-GGUF` repository at

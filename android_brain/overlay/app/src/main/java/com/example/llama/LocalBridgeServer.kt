@@ -1,5 +1,6 @@
 package com.prismml.herbiebrain
 
+import android.util.Base64
 import android.util.Log
 import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.flow.collect
@@ -22,6 +23,7 @@ class LocalBridgeServer(
     private val inferenceMutex: Mutex,
     private val voice: HerbieVoice,
     private val ears: () -> HerbieEars?,
+    private val eyes: HerbieEyes,
     private val token: String,
     private val modelName: String,
 ) {
@@ -93,6 +95,7 @@ class LocalBridgeServer(
                         .put("voice_ready", voice.isReady)
                         .put("ears", ears()?.state?.name?.lowercase() ?: "off")
                         .put("ears_recognizer", ears()?.mode ?: "none")
+                        .put("eyes", eyes.allowed)
                         .put("local_only", true)
                         .put("motor_authority", false)
                         .put("safe_motion_state", "STOP")
@@ -104,6 +107,7 @@ class LocalBridgeServer(
                 if (headers["authorization"] != "Bearer $token") {
                     return writeJson(socket, 401, error("unauthorized"))
                 }
+                if (path == "/v1/see") return see(socket)
                 if (path == "/v1/speak/stop") {
                     return writeJson(socket, 200, safe(JSONObject().put("stopped", voice.stop())))
                 }
@@ -177,6 +181,25 @@ class LocalBridgeServer(
         writeJson(socket, 200, safe(JSONObject().put("spoken", finished)))
     }
 
+    /** One still from the camera, base64 JPEG. Held in memory only. */
+    private fun see(socket: Socket) {
+        val jpeg = try {
+            eyes.capture()
+        } catch (failure: Exception) {
+            Log.w(TAG, "Camera capture failed", failure)
+            return writeJson(socket, 503, error(failure.message ?: "camera_unavailable"))
+        }
+        writeJson(
+            socket,
+            200,
+            safe(
+                JSONObject()
+                    .put("jpeg_base64", Base64.encodeToString(jpeg, Base64.NO_WRAP))
+                    .put("bytes", jpeg.size),
+            ),
+        )
+    }
+
     private fun safe(body: JSONObject) = body
         .put("local_only", true)
         .put("motor_authority", false)
@@ -211,13 +234,13 @@ class LocalBridgeServer(
     companion object {
         private const val HOST = "127.0.0.1"
         private const val PORT = 8766
-        private const val VERSION = "0.3.0"
+        private const val VERSION = "0.4.0"
         private const val TAG = "HerbieModelBridge"
         private const val MAX_BODY_BYTES = 32_768
         private const val MAX_MESSAGE_CHARS = 4_000
         private const val MAX_CONTEXT_CHARS = 8_000
         private const val MAX_OUTPUT_TOKENS = 128
         private const val MAX_SPEECH_CHARS = 1_000
-        private val POST_PATHS = setOf("/v1/chat", "/v1/speak", "/v1/speak/stop")
+        private val POST_PATHS = setOf("/v1/chat", "/v1/speak", "/v1/speak/stop", "/v1/see")
     }
 }

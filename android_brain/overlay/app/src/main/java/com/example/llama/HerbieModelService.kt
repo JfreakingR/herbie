@@ -28,11 +28,14 @@ class HerbieModelService : Service() {
     private var bridge: LocalBridgeServer? = null
     private var voice: HerbieVoice? = null
     private var ears: HerbieEars? = null
+    private var eyes: HerbieEyes? = null
+    private var foregroundTypes = 0
     @Volatile private var loading = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        eyes = HerbieEyes(this)
         val canHear = startInForeground()
         voice = HerbieVoice(this)
         if (canHear) startEars()
@@ -43,7 +46,10 @@ class HerbieModelService : Service() {
         // Started at boot the service has no microphone (Android 14+ refuses it
         // from the background) and so no ears. A later start from the app in
         // the foreground is allowed the microphone: take it then.
-        if (ears == null && voice != null && startInForeground()) startEars()
+        // The same goes for the camera: take whichever of the two is missing.
+        val hadEars = ears != null
+        val canHear = startInForeground()
+        if (!hadEars && canHear && voice != null) startEars()
         startModelIfNeeded()
         return START_STICKY
     }
@@ -51,30 +57,43 @@ class HerbieModelService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     /**
-     * Android 14+ only lets a service use the microphone if it says so when it
-     * goes foreground, and refuses that type when started from the background
-     * (e.g. at boot). Returns whether the microphone type was granted.
+     * Android 14+ only lets a service use the microphone or camera if it says
+     * so when it goes foreground, and refuses both when started from the
+     * background (e.g. at boot). Asks for every type whose permission is
+     * granted; never gives up a type it already holds, so a refused attempt
+     * from the background cannot cost it its ears. Returns whether it holds
+     * the microphone.
      */
     private fun startInForeground(): Boolean {
-        val starting = notification("Starting local conversation model…")
-        val micGranted = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
-        if (micGranted) {
+        var wanted = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        if (granted(android.Manifest.permission.RECORD_AUDIO)) {
+            wanted = wanted or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        if (granted(android.Manifest.permission.CAMERA)) {
+            wanted = wanted or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        }
+        if (foregroundTypes == 0 || (wanted and foregroundTypes.inv()) != 0) {
             try {
-                startForeground(
-                    NOTIFICATION_ID,
-                    starting,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
-                )
-                return true
+                startForeground(NOTIFICATION_ID, notification("Starting local conversation model…"), wanted)
+                foregroundTypes = wanted
             } catch (refused: Exception) {
-                Log.w(TAG, "Microphone foreground refused; running without ears", refused)
+                Log.w(TAG, "Microphone/camera foreground refused; running without ears or eyes", refused)
+                if (foregroundTypes == 0) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification("Starting local conversation model…"),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                    )
+                    foregroundTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                }
             }
         }
-        startForeground(NOTIFICATION_ID, starting, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        return false
+        eyes?.allowed = (foregroundTypes and ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA) != 0
+        return (foregroundTypes and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) != 0
     }
+
+    private fun granted(permission: String) =
+        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     private fun startEars() {
         val brainToken = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
@@ -112,6 +131,7 @@ class HerbieModelService : Service() {
                     inferenceMutex,
                     checkNotNull(voice),
                     { ears },
+                    checkNotNull(eyes),
                     token,
                     model.name,
                 ).also { it.start() }

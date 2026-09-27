@@ -16,6 +16,7 @@ written by tools/Set-Herbie-Cloud-Keys.ps1:
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import urllib.error
@@ -79,7 +80,12 @@ def load_config() -> dict[str, str] | None:
 
 
 def build_request(
-    model: str, message: str, context: str, max_tokens: int, skills: str = ""
+    model: str,
+    message: str,
+    context: str,
+    max_tokens: int,
+    skills: str = "",
+    image: bytes | None = None,
 ) -> dict[str, Any]:
     system = PERSONA
     if skills:
@@ -94,8 +100,25 @@ def build_request(
         # Spoken small talk: latency matters more than deliberation.
         "thinking": {"type": "disabled"},
         "system": system,
-        "messages": [{"role": "user", "content": message}],
+        "messages": [{"role": "user", "content": _content(message, image)}],
     }
+
+
+def _content(message: str, image: bytes | None) -> Any:
+    """Plain text, or a camera still followed by the text about it."""
+    if image is None:
+        return message
+    return [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": base64.b64encode(image).decode("ascii"),
+            },
+        },
+        {"type": "text", "text": message},
+    ]
 
 
 def parse_reply(result: Any) -> str:
@@ -120,12 +143,13 @@ def chat(
     max_tokens: int,
     timeout: float = TIMEOUT_SECONDS,
     skills: str = "",
+    image: bytes | None = None,
 ) -> dict[str, Any]:
     config = load_config()
     if config is None:
         raise CloudUnavailable("cloud_not_provisioned")
     body = json.dumps(
-        build_request(config["model"], message, context, max_tokens, skills),
+        build_request(config["model"], message, context, max_tokens, skills, image),
         separators=(",", ":"),
     ).encode("utf-8")
     request = urllib.request.Request(

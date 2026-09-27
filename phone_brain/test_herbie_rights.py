@@ -303,7 +303,9 @@ class ApiTokenTests(unittest.TestCase):
         body = chat()
         self.assertEqual(body["text"], "Let me see.")
         self.assertEqual(body["neck"]["look"], 90)
-        self.assertEqual(seen[-1], herbie_neck.NECK_SKILL)
+        # No cloud key in the test: the neck is offered, sight is not.
+        self.assertIn(herbie_neck.NECK_SKILL, seen[-1])
+        self.assertIn("You cannot see right now", seen[-1])
 
         claim = json.loads(self._post("/v1/neck/claim", {"facing": 0}, token).read())
         self.assertEqual(claim["look"]["degrees"], 90)
@@ -312,6 +314,50 @@ class ApiTokenTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as err:
             self._post("/v1/neck/claim", {"facing": 0})
         self.assertEqual(err.exception.code, 401)
+
+    def test_see_answers_from_a_photo_and_waits_for_a_turn(self):
+        from unittest import mock
+        import herbie_neck
+
+        self.brain.NECK = herbie_neck.NeckState()
+        token = "test-token-value"
+        replies = []
+
+        def chat(first_reply):
+            with mock.patch.object(self.brain.herbie_chat, "route_chat",
+                                   return_value={"text": first_reply, "brain": "cloud"}), \
+                    mock.patch.object(self.brain.herbie_cloud, "load_config",
+                                      return_value={"key": "k" * 30, "model": "m"}), \
+                    mock.patch.object(self.brain.herbie_eyes, "look_now",
+                                      return_value=b"\xff\xd8jpeg") as camera, \
+                    mock.patch.object(self.brain.herbie_cloud, "chat",
+                                      return_value={"text": "A cat on the sofa."}) as cloud, \
+                    mock.patch.object(self.brain.herbie_recall, "learn_in_background"), \
+                    mock.patch.object(self.brain.herbie_recall, "save_dialogue"):
+                body = json.loads(self._post("/v1/chat", {"message": "what do you see?"}, token).read())
+                replies.append((camera.call_count, cloud.call_args))
+                return body
+
+        # Looking without turning: answered in the same reply, from the photo.
+        body = chat("Let me look. [see]")
+        self.assertEqual(body["text"], "Let me look. A cat on the sofa.")
+        calls, cloud_args = replies[-1]
+        self.assertEqual(calls, 1)
+        self.assertEqual(cloud_args.kwargs["image"], b"\xff\xd8jpeg")
+
+        # Turning and looking: no photo yet; it is owed once the turn is done.
+        self._post("/v1/neck/claim", {"facing": 0}, token).read()
+        body = chat("Turning round. [look 180] [see]")
+        self.assertEqual(body["text"], "Turning round.")
+        self.assertEqual(replies[-1][0], 0)
+        with mock.patch.object(self.brain, "start_see_after_turn") as later:
+            claim = json.loads(self._post("/v1/neck/claim", {"facing": 0}, token).read())
+            self.assertEqual(claim["look"]["degrees"], 180)
+            self._post("/v1/neck/claim", {"facing": 90, "busy": True}, token).read()
+            later.assert_not_called()
+            self._post("/v1/neck/claim", {"facing": 180}, token).read()
+            later.assert_called_once()
+            self.assertEqual(later.call_args.args[0]["question"], "what do you see?")
 
     def test_reads_require_a_token(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:

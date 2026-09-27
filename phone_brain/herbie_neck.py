@@ -1,7 +1,7 @@
 """Herbie's neck, as the brain sees it.
 
-The neck is the old treat wheel on top of his head. A camera is to go on it,
-but no brain receives images yet, so the skill tells him he cannot see. It
+The neck is the old treat wheel on top of his head, with the Galaxy (his
+camera, see herbie_eyes) riding on it. It
 turns one way only, in 22.5-degree steps, about ten seconds a step. The wheel
 itself is driven from the Windows computer (the only machine with a link to
 the VAVA motor board); this module is the phone's side of that arrangement:
@@ -37,10 +37,10 @@ NECK_SKILL = (
     "full turn behind you takes over a minute. To turn it, put [look N] "
     "anywhere in your reply, where N is 0 to 359 degrees from straight ahead in "
     "the direction it turns (0 faces forward again). Use it when someone asks "
-    "you to turn or face them; at most one per reply. You cannot see yet - no "
-    "picture reaches you - so never describe what you would see or claim to "
-    "have seen anything. The tag is removed before you speak, so don't read it out."
+    "you to turn, look around or face them; at most one per reply. The tag is "
+    "removed before you speak, so don't read it out."
 )
+SEE_WAIT_S = 300.0              # a photo still owed after a turn goes stale
 
 _LOOK = re.compile(
     r"\[\s*look\s+(-?\d{1,4})\s*(?:°|deg(?:rees)?)?\s*\]", re.IGNORECASE
@@ -76,6 +76,8 @@ class NeckState:
         self._facing: float | None = None
         self._busy = False
         self._last_checkin: float | None = None
+        self._awaiting_see: dict[str, Any] | None = None
+        self._ready_see: dict[str, Any] | None = None
 
     def available(self, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
@@ -83,16 +85,28 @@ class NeckState:
             return (self._last_checkin is not None
                     and now - self._last_checkin <= CONTROLLER_TIMEOUT_S)
 
-    def request(self, degrees: int, now: float | None = None) -> int:
-        """Queue a look; a newer wish replaces an unclaimed older one."""
+    def request(self, degrees: int, now: float | None = None,
+                see_question: str | None = None) -> int:
+        """Queue a look; a newer wish replaces an unclaimed older one.
+
+        With `see_question`, a photo is owed once the turn has finished: see
+        `pop_ready_see`.
+        """
         if isinstance(degrees, bool) or not isinstance(degrees, int):
             raise ValueError("invalid_degrees")
         now = time.monotonic() if now is None else now
         with self._lock:
             request_id = self._next_id
             self._next_id += 1
-            self._pending = {"id": request_id, "degrees": degrees % 360, "at": now}
+            self._pending = {"id": request_id, "degrees": degrees % 360, "at": now,
+                             "see_question": see_question}
             return request_id
+
+    def pop_ready_see(self) -> dict[str, Any] | None:
+        """A photo owed now that its turn has finished, taken at most once."""
+        with self._lock:
+            ready, self._ready_see = self._ready_see, None
+            return ready
 
     def claim(self, facing: Any = None, busy: bool = False,
               now: float | None = None) -> dict[str, Any] | None:
@@ -111,9 +125,21 @@ class NeckState:
             pending = self._pending
             if pending is not None and now - pending["at"] > REQUEST_TTL_S:
                 self._pending = pending = None
+            # A turn handed out on an earlier check-in has finished once the
+            # controller reports idle again: the photo it owes is due.
+            owed = self._awaiting_see
+            if owed is not None and now - owed["at"] > SEE_WAIT_S:
+                self._awaiting_see = owed = None
+            if owed is not None and not busy:
+                self._awaiting_see = None
+                self._ready_see = {"question": owed["question"],
+                                   "degrees": owed["degrees"], "facing": facing}
             if busy or pending is None:
                 return None
             self._pending = None
+            if pending.get("see_question"):
+                self._awaiting_see = {"question": pending["see_question"],
+                                      "degrees": pending["degrees"], "at": now}
             return {"id": pending["id"], "degrees": pending["degrees"]}
 
     def snapshot(self, now: float | None = None) -> dict[str, Any]:

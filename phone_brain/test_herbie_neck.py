@@ -68,6 +68,32 @@ class NeckStateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid_degrees"):
             state.request("90")
 
+    def test_photo_waits_until_the_turn_is_done(self):
+        state = neck.NeckState()
+        state.request(180, now=0, see_question="what's behind you?")
+        self.assertEqual(state.claim(facing=0, now=1)["degrees"], 180)
+        self.assertIsNone(state.pop_ready_see())             # just handed out
+        state.claim(facing=45, busy=True, now=6)
+        self.assertIsNone(state.pop_ready_see())             # still turning
+        state.claim(facing=180, busy=False, now=90)
+        self.assertEqual(state.pop_ready_see(),
+                         {"question": "what's behind you?", "degrees": 180, "facing": 180})
+        self.assertIsNone(state.pop_ready_see())             # only once
+
+    def test_look_without_see_owes_no_photo(self):
+        state = neck.NeckState()
+        state.request(90, now=0)
+        state.claim(facing=0, now=1)
+        state.claim(facing=90, now=60)
+        self.assertIsNone(state.pop_ready_see())
+
+    def test_an_owed_photo_goes_stale(self):
+        state = neck.NeckState()
+        state.request(90, now=0, see_question="look")
+        state.claim(facing=0, now=1)
+        state.claim(facing=90, busy=False, now=2 + neck.SEE_WAIT_S)
+        self.assertIsNone(state.pop_ready_see())
+
     def test_skill_keeps_the_wheels_off(self):
         self.assertIn("wheels stay off", neck.NECK_SKILL)
         self.assertIn("[look N]", neck.NECK_SKILL)

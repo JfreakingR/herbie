@@ -122,12 +122,13 @@ def post_local_chat(
 
 
 def post_bridge_voice(path: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
-    """Ask the on-phone bridge app to speak (/v1/speak) or hush (/v1/speak/stop).
+    """Ask the on-phone bridge app to speak (/v1/speak), hush (/v1/speak/stop)
+    or take one camera still (/v1/see, see herbie_eyes).
 
     The bridge owns Android's TTS because Termux:API's hung on this phone. It
     answers /v1/speak once the utterance has finished playing.
     """
-    if path not in ("/v1/speak", "/v1/speak/stop"):
+    if path not in ("/v1/speak", "/v1/speak/stop", "/v1/see"):
         raise ValueError("invalid_voice_path")
     request = urllib.request.Request(
         PHONE_BRIDGE_URL + path,
