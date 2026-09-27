@@ -53,6 +53,10 @@ if (-not $java) { throw "No JDK under $BuildRoot. Run tools\Install-Herbie-Andro
 $env:JAVA_HOME = Split-Path (Split-Path $java.FullName -Parent) -Parent
 $env:ANDROID_HOME = Join-Path $BuildRoot 'android-sdk'
 $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+# The earlier build kept Gradle's downloads and caches here; without this Gradle
+# would fetch everything again into the user profile on C:.
+$GradleHome = Join-Path $BuildRoot 'gradle-home'
+if (Test-Path -LiteralPath $GradleHome) { $env:GRADLE_USER_HOME = $GradleHome }
 if (-not (Test-Path -LiteralPath $env:ANDROID_HOME)) { throw "No Android SDK at $env:ANDROID_HOME." }
 
 Write-Host "Copying Herbie's overlay into $Project ..." -ForegroundColor Cyan
@@ -61,9 +65,10 @@ Copy-Item -Path (Join-Path $Overlay '*') -Destination $Project -Recurse -Force
 Write-Host 'Building (several minutes the first time) ...' -ForegroundColor Cyan
 Push-Location $Project
 try {
-    # --no-daemon and no file-system watching: both stalled the earlier build
-    # on this PC (Gradle probed an empty removable drive and hung).
-    & $Gradle ':app:assembleDebug' --no-daemon --console=plain '-Dorg.gradle.vfs.watch=false'
+    # --no-daemon and --no-watch-fs: both stalled the earlier build on this PC
+    # (Gradle probed an empty removable drive and hung). The flag, unlike a -D
+    # property, also reaches the single-use daemon Gradle forks.
+    & $Gradle ':app:assembleDebug' --no-daemon --no-watch-fs --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Build failed (exit $LASTEXITCODE). The first error above is the one to fix." }
 } finally {
     Pop-Location
