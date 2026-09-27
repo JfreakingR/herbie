@@ -10,6 +10,7 @@ Usage:
     python tools/Send-Herbie-Frame.py treat [sequence]
     python tools/Send-Herbie-Frame.py feed <portions> [sequence]
     python tools/Send-Herbie-Frame.py wheel <action> <duration_ms> [sequence]
+    python tools/Send-Herbie-Frame.py probe <peripheral> <action> <duration> [sequence]
 
     treat        turn the treat wheel one step - the factory self-test's own
                  `toggle_peripheral,0,0,4,1,0` (peripheral 4, snack_lattices)
@@ -20,6 +21,10 @@ Usage:
                  `wheel 4 0` and `wheel 1 1000` all moved exactly as far as
                  `treat` - the board ignores action and duration here.
                  action 0..9 (0 = off), duration 0..3000 ms.
+    probe        EXPERIMENT, hunting for a way to turn the wheel backwards:
+                 any TOGGLE_PERIPHERAL on the feeding parts only - 3
+                 feeding_tray, 4 the wheel, 7 instant_feeding. action 0..9,
+                 duration 0..65535 (65535 = -1 as a signed short).
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
                  Only `forward` is physically confirmed as of 2026-09-19.
@@ -182,7 +187,7 @@ def send_frame(target, frame, show_log=True):
 
 def main(argv):
     verb = argv[1] if len(argv) > 1 else ""
-    nargs = {"treat": 0, "feed": 1, "wheel": 2}.get(verb, 1)   # args before [sequence]
+    nargs = {"treat": 0, "feed": 1, "wheel": 2, "probe": 3}.get(verb, 1)   # args before [sequence]
     if not 2 + nargs <= len(argv) <= 3 + nargs:
         print(__doc__)
         return 2
@@ -202,6 +207,11 @@ def main(argv):
     try:
         if verb == "treat":
             frame = vava.treat_wheel(sequence)
+        elif verb == "probe":
+            number, action, duration = int(argv[2]), int(argv[3]), int(argv[4])
+            if number not in (3, 4, 7) or not 0 <= action <= 9:
+                raise ValueError("probe_out_of_range - peripheral 3, 4 or 7; action 0..9")
+            frame = vava.toggle_peripheral(number, action, duration, sequence)
         elif verb == "wheel":
             action, duration = int(argv[2]), int(argv[3])
             if not 0 <= action <= 9 or not 0 <= duration <= 3000:
