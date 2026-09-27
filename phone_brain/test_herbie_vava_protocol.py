@@ -235,21 +235,21 @@ class TreatWheelTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "invalid_portions"):
                 vava.feed(bad, 1)
 
-    def test_neck_is_9_steps_of_40_degrees(self):
-        self.assertEqual(vava.NECK_STEPS_PER_TURN, 9)
-        self.assertEqual(vava.NECK_DEGREES_PER_STEP, 40)
-        # Owner's first count: 18 frames for a full turn.
-        self.assertEqual(vava.NECK_STEPS_PER_TURN * vava.NECK_FRAMES_PER_STEP, 18)
+    def test_neck_is_16_steps_of_22_5_degrees(self):
+        # 16 spokes on the wheel's inner ring, one spoke per step.
+        self.assertEqual(vava.NECK_STEPS_PER_TURN, 16)
+        self.assertEqual(vava.NECK_DEGREES_PER_STEP, 22.5)
+        self.assertEqual(vava.NECK_FRAMES_PER_STEP, 2)
 
     def test_neck_steps_go_forward_the_short_or_long_way(self):
         self.assertEqual(vava.neck_steps_to(0, 0), 0)
-        self.assertEqual(vava.neck_steps_to(0, 90), 2)     # 90/40 = 2.25 -> 2
-        self.assertEqual(vava.neck_steps_to(0, 160), 4)
-        self.assertEqual(vava.neck_steps_to(0, 200), 5)
-        self.assertEqual(vava.neck_steps_to(4, 0), 5)      # back home, forward only
-        self.assertEqual(vava.neck_steps_to(3, 80), 8)     # 40 degrees "back" = 8 forward
-        self.assertEqual(vava.neck_steps_to(0, 350), 0)    # rounds to home
-        self.assertEqual(vava.neck_steps_to(0, -40), 8)
+        self.assertEqual(vava.neck_steps_to(0, 90), 4)
+        self.assertEqual(vava.neck_steps_to(0, 180), 8)
+        self.assertEqual(vava.neck_steps_to(0, 45), 2)
+        self.assertEqual(vava.neck_steps_to(8, 0), 8)      # back home, forward only
+        self.assertEqual(vava.neck_steps_to(4, 67), 15)    # 22.5 "back" = 15 forward
+        self.assertEqual(vava.neck_steps_to(0, 355), 0)    # rounds to home
+        self.assertEqual(vava.neck_steps_to(0, -90), 12)
         with self.assertRaisesRegex(ValueError, "invalid_degrees"):
             vava.neck_steps_to(0, "90")
 

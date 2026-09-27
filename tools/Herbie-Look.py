@@ -7,8 +7,8 @@ Usage:
     python tools/Herbie-Look.py <degrees>    turn to face that angle, e.g. 90
     python tools/Herbie-Look.py step [n]     turn n steps (default 1)
 
-One step is 40 degrees; 9 steps is a full turn (owner-measured 2026-09-27).
-180 is not a whole number of steps: it rounds to 160 (4 steps).
+One step is one spoke of the wheel's 16: 22.5 degrees, so 90 is 4 steps and
+180 is 8 (owner-measured 2026-09-27). Other angles round to the nearest step.
 The wheel is only known to turn one way, so asking for an angle "behind"
 him goes forward the long way round. Angles count in that direction.
 
@@ -19,7 +19,7 @@ comes back AMBIGUOUS, point him forward again and run `home`.
 
 Each step is two wheel frames: the wheel only visibly moves on every other
 one. Every frame is followed by HERBIE_NECK_PAUSE seconds (default 5), as
-frames sent too close together are dropped. About 10 s per 40 degrees.
+frames sent too close together are dropped. About 10 s per step.
 
 Uses the same link as Send-Herbie-Frame.py (USB by default,
 HERBIE_ADB_TARGET for Wi-Fi) and its exactly-once write per step.
@@ -39,8 +39,8 @@ vava = sender.vava
 
 STATE = Path.home() / ".herbie" / "neck_step.txt"
 # The wheel makes a visible move on every OTHER frame (2026-09-27: at 6.5 s
-# and 14 s spacing, and with an "off" frame between), so each 40-degree step
-# is NECK_FRAMES_PER_STEP frames. Frames too close together are dropped
+# and 14 s spacing, and with an "off" frame between), so each 22.5-degree
+# step is NECK_FRAMES_PER_STEP frames. Frames too close together are dropped
 # (~2-3 s apart lost most of them), so every frame is followed by a pause.
 # Override with HERBIE_NECK_PAUSE (seconds).
 STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "5"))
@@ -59,11 +59,11 @@ def write_step(step):
 
 
 def facing(step):
-    return f"facing {step * vava.NECK_DEGREES_PER_STEP} degrees (step {step} of {vava.NECK_STEPS_PER_TURN})"
+    return f"facing {step * vava.NECK_DEGREES_PER_STEP:g} degrees (step {step} of {vava.NECK_STEPS_PER_TURN})"
 
 
 def turn(steps, current):
-    """Turn `steps` 40-degree steps, NECK_FRAMES_PER_STEP frames each. 0 = ok."""
+    """Turn `steps` 22.5-degree steps, NECK_FRAMES_PER_STEP frames each. 0 = ok."""
     if steps == 0:
         print("already there -", facing(current))
         return 0
