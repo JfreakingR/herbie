@@ -17,8 +17,9 @@ updated after every step that is sent. If anything turns the wheel without
 this tool (a hand, the factory app, a restart that re-centres it), or a step
 comes back AMBIGUOUS, point him forward again and run `home`.
 
-Steps are spaced HERBIE_NECK_PAUSE seconds apart (default 12): the wheel
-silently drops a step sent while it is still turning, though it acks it.
+Each step sends the wheel "off" then "on" (it is a toggle, and a bare "on"
+only moved it every other time), then waits HERBIE_NECK_PAUSE seconds
+(default 4) for the move to finish.
 
 Uses the same link as Send-Herbie-Frame.py (USB by default,
 HERBIE_ADB_TARGET for Wi-Fi) and its exactly-once write per step.
@@ -37,11 +38,12 @@ _spec.loader.exec_module(sender)
 vava = sender.vava
 
 STATE = Path.home() / ".herbie" / "neck_step.txt"
-# The wheel IGNORES a step that arrives too soon after its last move - and
-# acks it anyway, so the ack is no proof. 2026-09-27: at ~6.5 s per step only
-# every other step moved (~13 s apart). Override with HERBIE_NECK_PAUSE
-# (seconds) while finding the real minimum.
-STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "12"))
+# The wheel is a toggle: an "on" frame after a move only switches it off, so
+# repeated "on" frames moved it every OTHER time, at 6.5 s and at 14 s spacing
+# alike (2026-09-27). Each step therefore sends off, then on. The pause lets
+# the move finish; override with HERBIE_NECK_PAUSE (seconds).
+OFF_ON_GAP_S = 0.5
+STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "4"))
 
 
 def read_step():
@@ -72,9 +74,16 @@ def turn(steps, current):
     sequence = int(time.time()) & 0xFF
     for i in range(steps):
         sequence = sequence % 0xFF + 1          # 1..255, never 0
-        frame = vava.to_wire(vava.treat_wheel(sequence))
-        print(f"step {i + 1}/{steps}  seq 0x{sequence:02X}  ", end="")
-        result = sender.send_frame(target, frame, show_log=False)
+        off = vava.to_wire(vava.treat_wheel_off(sequence))
+        print(f"step {i + 1}/{steps}  off 0x{sequence:02X}  ", end="")
+        result = sender.send_frame(target, off, show_log=False)
+        if result == 0:
+            # "off" moves nothing, so a failed one just stops here safely.
+            time.sleep(OFF_ON_GAP_S)
+            sequence = sequence % 0xFF + 1
+            frame = vava.to_wire(vava.treat_wheel(sequence))
+            print(f"         on 0x{sequence:02X}  ", end="")
+            result = sender.send_frame(target, frame, show_log=False)
         if result != 0:
             if result == 3:
                 print("Stopped. That step may or may not have happened, so his "

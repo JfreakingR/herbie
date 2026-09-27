@@ -251,6 +251,10 @@ class TreatWheelTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid_degrees"):
             vava.neck_steps_to(0, "90")
 
+    def test_wheel_off_is_action_0(self):
+        payload = vava.parse_frame(vava.treat_wheel_off(1))["payload"]
+        self.assertEqual(payload, bytes([vava.PERIPHERAL_SNACK_LATTICES, 0, 0, 0]))
+
     def test_describe_names_the_wheel(self):
         text = vava.describe(vava.parse_frame(vava.treat_wheel(1)))
         self.assertEqual(text, "toggle snack_lattices action 1 duration 0")

@@ -200,15 +200,15 @@ PERIPHERAL_NAMES = {1: "laser_pen", 2: "bubble_machine", 3: "feeding_tray",
                     9: "computer_power_click", 11: "infrared_led",
                     12: "collision_avoidance", 22: "bucket", 33: "balance"}
 TREAT_WHEEL_STEP = 1          # action the self-test sends to peripheral 4
+TREAT_WHEEL_OFF = 0           # "off", as the self-test sends to the LED/IR toggles
 MAX_FEED_PORTIONS = 3         # cap on instant_feeding portions per frame
 
 # Herbie's neck is the treat wheel with a camera on it. Owner-measured on
-# 2026-09-27: every treat_wheel() frame moves the rim a fixed ~2 inches on a
-# ~6 inch wheel, so about 9 steps make a full turn - 40 degrees each. (A first
-# count of 18 was commands, not moves: the wheel ignores a frame that arrives
-# within roughly 7-13 s of its last move, and still acks it.) The board also
-# ignores action and duration for this peripheral. Only one direction is
-# known, so turning "left" means going the long way round.
+# 2026-09-27: every move turns the rim a fixed ~2 inches on a ~6 inch wheel,
+# so about 9 moves make a full turn - 40 degrees each. The board ignores
+# action and duration for this peripheral (2, 4, and 1000 ms all moved the
+# same), and it only moves on every other "on" frame - see treat_wheel_off().
+# Only one direction is known, so turning "left" goes the long way round.
 NECK_STEPS_PER_TURN = 9
 NECK_DEGREES_PER_STEP = 360 // NECK_STEPS_PER_TURN
 
@@ -344,6 +344,16 @@ def neck_steps_to(current_step: int, degrees: int) -> int:
             raise ValueError(f"invalid_{name}")
     target = round((degrees % 360) / NECK_DEGREES_PER_STEP) % NECK_STEPS_PER_TURN
     return (target - current_step) % NECK_STEPS_PER_TURN
+
+
+def treat_wheel_off(sequence: int) -> bytes:
+    """Reset the wheel toggle: peripheral 4, action 0. Moves nothing.
+
+    2026-09-27: repeated treat_wheel() frames only moved the wheel on every
+    other frame, even 14 s apart - the peripheral toggles, and the frame after
+    a move only switches it off. Sending off-then-on makes every step move.
+    """
+    return toggle_peripheral(PERIPHERAL_SNACK_LATTICES, TREAT_WHEEL_OFF, 0, sequence)
 
 
 def feed(portions: int, sequence: int) -> bytes:

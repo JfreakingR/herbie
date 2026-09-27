@@ -19,7 +19,7 @@ Usage:
                  `treat` is `wheel 1 0`. Tried 2026-09-27: `wheel 2 0`,
                  `wheel 4 0` and `wheel 1 1000` all moved exactly as far as
                  `treat` - the board ignores action and duration here.
-                 action 1..9, duration 0..3000 ms.
+                 action 0..9 (0 = off), duration 0..3000 ms.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
                  Only `forward` is physically confirmed as of 2026-09-19.
@@ -204,8 +204,8 @@ def main(argv):
             frame = vava.treat_wheel(sequence)
         elif verb == "wheel":
             action, duration = int(argv[2]), int(argv[3])
-            if not 1 <= action <= 9 or not 0 <= duration <= 3000:
-                raise ValueError("wheel_out_of_range - action 1..9, duration 0..3000")
+            if not 0 <= action <= 9 or not 0 <= duration <= 3000:
+                raise ValueError("wheel_out_of_range - action 0..9, duration 0..3000")
             frame = vava.toggle_peripheral(vava.PERIPHERAL_SNACK_LATTICES,
                                            action, duration, sequence)
         elif verb == "feed":
