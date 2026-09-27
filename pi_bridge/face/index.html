@@ -11,6 +11,12 @@
       --ink: #141414;
       --hl: #ffffff;
       --dock: rgba(12, 28, 24, 0.72);
+      --skin: #8fcab3;
+      --iris-in: #3f8f9c;
+      --iris-out: #173c47;
+      --blush: #ef7f93;
+      --tongue: #d9606f;
+      --teeth: #f4fbf8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -131,16 +137,57 @@
 <body>
   <div id="screen">
     <svg id="face-svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <radialGradient id="iris" cx="0.42" cy="0.38" r="0.7">
+          <stop offset="0" stop-color="var(--iris-in)" />
+          <stop offset="0.7" stop-color="var(--iris-out)" />
+          <stop offset="1" stop-color="#0b1a1f" />
+        </radialGradient>
+        <clipPath id="clip-l"><ellipse cx="0" cy="0" rx="16.5" ry="16.5" /></clipPath>
+        <clipPath id="clip-r"><ellipse cx="0" cy="0" rx="16.5" ry="16.5" /></clipPath>
+        <clipPath id="clip-mouth"><use href="#mouth-fill" /></clipPath>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" /></filter>
+      </defs>
       <g id="face">
         <g id="eye-l" class="eye">
           <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
-          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+          <g clip-path="url(#clip-l)">
+            <g id="look-l">
+              <circle cx="0" cy="0" r="10.2" fill="url(#iris)" />
+              <circle cx="0" cy="0" r="10.2" fill="none" stroke="#0b1a1f" stroke-width="1.1" opacity="0.8" />
+              <circle id="pupil-l" cx="0" cy="0" r="5" fill="#050807" />
+              <circle cx="-4.6" cy="-4.6" r="3.6" fill="var(--hl)" />
+              <circle cx="4.2" cy="3.9" r="1.5" fill="var(--hl)" opacity="0.85" />
+            </g>
+            <path d="M -12 9 Q 0 15.5 12 9" fill="none" stroke="var(--hl)" stroke-width="1" opacity="0.18" stroke-linecap="round" />
+            <path id="lid-l" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.8" />
+            <path id="low-l" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.4" />
+          </g>
         </g>
         <g id="eye-r" class="eye">
           <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
-          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+          <g clip-path="url(#clip-r)">
+            <g id="look-r">
+              <circle cx="0" cy="0" r="10.2" fill="url(#iris)" />
+              <circle cx="0" cy="0" r="10.2" fill="none" stroke="#0b1a1f" stroke-width="1.1" opacity="0.8" />
+              <circle id="pupil-r" cx="0" cy="0" r="5" fill="#050807" />
+              <circle cx="-4.6" cy="-4.6" r="3.6" fill="var(--hl)" />
+              <circle cx="4.2" cy="3.9" r="1.5" fill="var(--hl)" opacity="0.85" />
+            </g>
+            <path d="M -12 9 Q 0 15.5 12 9" fill="none" stroke="var(--hl)" stroke-width="1" opacity="0.18" stroke-linecap="round" />
+            <path id="lid-r" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.8" />
+            <path id="low-r" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.4" />
+          </g>
         </g>
+        <path id="brow-l" fill="none" stroke="var(--ink)" stroke-width="4.4" stroke-linecap="round" />
+        <path id="brow-r" fill="none" stroke="var(--ink)" stroke-width="4.4" stroke-linecap="round" />
+        <ellipse id="cheek-l" cx="54" cy="121" rx="11" ry="6" fill="var(--blush)" filter="url(#soft)" opacity="0" />
+        <ellipse id="cheek-r" cx="146" cy="121" rx="11" ry="6" fill="var(--blush)" filter="url(#soft)" opacity="0" />
         <path id="mouth-fill" fill="var(--ink)" opacity="0" />
+        <g id="mouth-inside" clip-path="url(#clip-mouth)" opacity="0">
+          <rect id="teeth" fill="var(--teeth)" rx="1.5" />
+          <ellipse id="tongue" fill="var(--tongue)" />
+        </g>
         <path id="mouth-line" fill="none" stroke="var(--ink)" stroke-width="6.2"
               stroke-linecap="round" stroke-linejoin="round" />
       </g>
@@ -177,6 +224,15 @@
   const eyeR = $("eye-r");
   const mouthFill = $("mouth-fill");
   const mouthLine = $("mouth-line");
+  const mouthInside = $("mouth-inside");
+  const teeth = $("teeth");
+  const tongue = $("tongue");
+  const lookL = $("look-l"), lookR = $("look-r");
+  const pupilL = $("pupil-l"), pupilR = $("pupil-r");
+  const lidLeft = $("lid-l"), lidRight = $("lid-r");
+  const lowLeft = $("low-l"), lowRight = $("low-r");
+  const browL = $("brow-l"), browR = $("brow-r");
+  const cheekL = $("cheek-l"), cheekR = $("cheek-r");
   const dock = $("dock");
   const params = new URLSearchParams(location.search);
   if (params.get("kiosk") === "1") document.body.classList.add("kiosk");
@@ -247,7 +303,16 @@
     excited:  { smile: 0.95, eye: 1.16, eyeY: 1.10, lookX: 0, lookY: -3, tilt: -3, lid: 0, skew: 0, width: 0.68 },
   };
 
+  const FEATURES = {
+    neutral: [0, 0, 0, 0.1], happy: [2, 2, 0, 0.3], joy: [4, 3, 0, 0.5], sad: [1, 11, 0, 0],
+    sorry: [2, 12, 0, 0.15], smirk: [1, -4, 4, 0.2], surprised: [9, 3, 0, 0.1], confused: [2, -5, 6, 0],
+    thinking: [3, 4, 4, 0], focused: [-2, -9, 0, 0], sleepy: [-2, 3, 0, 0.1], listen: [3, 2, 0, 0.15],
+    worried: [3, 15, 0, 0], angry: [-3, -17, 0, 0.25], love: [2, 5, 0, 0.85], embarrassed: [1, 9, 0, 0.95],
+    excited: [6, 1, 0, 0.45],
+  };
+
   const state = {
+    brow: 2, browTilt: 2, browAsym: 0, blush: 0.3,
     mode: "idle",
     emotion: "happy",
     lookX: 0, lookY: 0,
@@ -299,6 +364,11 @@
     tweenState("eyeY", e.eyeY, ms);
     tweenState("tilt", e.tilt, ms);
     tweenState("lid", e.lid, ms);
+    const [brow, browTilt, browAsym, blush] = FEATURES[name] || FEATURES.neutral;
+    tweenState("brow", brow, ms);
+    tweenState("browTilt", browTilt, ms);
+    tweenState("browAsym", browAsym, ms);
+    tweenState("blush", blush, ms * 1.6);
     if (!state.holdLook && !state.talking) {
       tweenState("lookX", e.lookX, ms);
       tweenState("lookY", e.lookY, ms);
@@ -643,6 +713,7 @@
         line: "",
         fill: `M ${cx - rx} ${y} a ${rx} ${ry2} 0 1 0 ${rx * 2} 0 a ${rx} ${ry2} 0 1 0 ${-rx * 2} 0`,
         fillOp: 1,
+        top: y - ry2, bottom: y + ry2, halfWidth: rx,
       };
     }
 
@@ -653,7 +724,7 @@
     const fill = `M ${left} ${ly}
       Q ${cx} ${cUp} ${right} ${ry}
       Q ${cx} ${cDn} ${left} ${ly} Z`;
-    return { line: "", fill, fillOp: 1 };
+    return { line: "", fill, fillOp: 1, top: Math.min(cUp, ly, ry), bottom: cDn, halfWidth: w / 2 };
   }
 
   function render() {
@@ -670,6 +741,18 @@
     mouthLine.setAttribute("opacity", drawn.fillOp ? 0 : 1);
     mouthFill.setAttribute("d", drawn.fill || "M 0 0");
     mouthFill.setAttribute("opacity", drawn.fillOp);
+    const depth = drawn.fillOp ? drawn.bottom - drawn.top : 0;
+    mouthInside.setAttribute("opacity", depth > 5 ? clamp((depth - 5) / 6, 0, 1) : 0);
+    if (depth > 5) {
+      teeth.setAttribute("x", 100 - drawn.halfWidth * 0.62);
+      teeth.setAttribute("y", drawn.top - 2);
+      teeth.setAttribute("width", drawn.halfWidth * 1.24);
+      teeth.setAttribute("height", clamp(depth * 0.2, 2, 4.2) + 2);
+      tongue.setAttribute("cx", 100);
+      tongue.setAttribute("cy", drawn.bottom + 1);
+      tongue.setAttribute("rx", drawn.halfWidth * 0.6);
+      tongue.setAttribute("ry", clamp(depth * 0.4, 3, 9));
+    }
 
     const ox = 70, oy = 88, gap = 60;
     const lookX = state.lookX, lookY = state.lookY;
@@ -677,6 +760,37 @@
     const syL = state.eyeY * state.blinkL;
     const syR = state.eyeY * state.blinkR;
     const lidSquash = 1 - state.lid * 0.12;
+
+    // Pupils lead the head a little and widen when he is interested.
+    const px = clamp(lookX * 0.35, -4.5, 4.5), py = clamp(lookY * 0.3, -4.5, 4.5);
+    const dilate = state.mode === "listen" || emotionName === "love" || emotionName === "excited" ? 6.2
+      : emotionName === "angry" || emotionName === "focused" ? 4 : 5;
+    for (const [look, pupil] of [[lookL, pupilL], [lookR, pupilR]]) {
+      look.setAttribute("transform", `translate(${px} ${py})`);
+      pupil.setAttribute("r", lerp(+pupil.getAttribute("r"), dilate, 0.12).toFixed(2));
+    }
+    // Upper lids follow mood and brow angle; lower lids push up in a big smile.
+    const cover = clamp(state.lid * 0.42 + (state.browTilt < 0 ? -state.browTilt * 0.008 : 0), 0, 0.7);
+    const squint = talking ? 0 : clamp((smile - 0.78) * 1.6, 0, 0.3);
+    const lidY = -19 + cover * 35;
+    const slant = state.browTilt * 0.28;
+    lidLeft.setAttribute("d", `M -19 -20 L 19 -20 L 19 ${lidY - slant} Q 0 ${lidY + 2} -19 ${lidY + slant} Z`);
+    lidRight.setAttribute("d", `M -19 -20 L 19 -20 L 19 ${lidY + slant} Q 0 ${lidY + 2} -19 ${lidY - slant} Z`);
+    const lowY = 19 - squint * 36;
+    const lowPath = `M -19 20 L 19 20 L 19 ${lowY + 3} Q 0 ${lowY - 3} -19 ${lowY + 3} Z`;
+    lowLeft.setAttribute("d", lowPath);
+    lowRight.setAttribute("d", lowPath);
+
+    const browLift = state.brow + (state.eyeY - 1) * 10;
+    const browAt = (x, raise, tilt) =>
+      `translate(${x + lookX * 0.5} ${oy - 27 - raise + lookY * 0.4}) rotate(${tilt})`;
+    const browShape = "M -11 2 Q 0 -3.2 11 2";
+    browL.setAttribute("d", browShape);
+    browR.setAttribute("d", browShape);
+    browL.setAttribute("transform", browAt(ox, browLift + state.browAsym, -state.browTilt));
+    browR.setAttribute("transform", browAt(ox + gap, browLift, state.browTilt));
+    cheekL.setAttribute("opacity", (state.blush * 0.6).toFixed(3));
+    cheekR.setAttribute("opacity", (state.blush * 0.6).toFixed(3));
 
     eyeL.setAttribute("transform",
       `translate(${ox + lookX}, ${oy + lookY}) scale(${sx * lidSquash}, ${syL}) rotate(${state.lid * -12})`);
