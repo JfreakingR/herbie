@@ -94,9 +94,9 @@ class NeckStateTests(unittest.TestCase):
         state.claim(facing=90, busy=False, now=2 + neck.SEE_WAIT_S)
         self.assertIsNone(state.pop_ready_see())
 
-    def test_skill_keeps_the_wheels_off(self):
-        self.assertIn("wheels stay off", neck.NECK_SKILL)
+    def test_skill_is_the_neck_only(self):
         self.assertIn("[look N]", neck.NECK_SKILL)
+        self.assertNotIn("drive", neck.NECK_SKILL)
 
 
 if __name__ == "__main__":

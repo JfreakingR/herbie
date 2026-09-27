@@ -135,6 +135,7 @@ $filesToPush = @(
     'herbie_recall.py',
     'herbie_neck.py',
     'herbie_eyes.py',
+    'herbie_drive.py',
     'start_pal_brain.sh',
     'stop_pal_brain.sh',
     'herbie_supervisor.sh',
@@ -149,7 +150,8 @@ $filesToPush = @(
     'test_herbie_cloud.py',
     'test_herbie_recall.py',
     'test_herbie_neck.py',
-    'test_herbie_eyes.py'
+    'test_herbie_eyes.py',
+    'test_herbie_drive.py'
 )
 
 $pushed = 0

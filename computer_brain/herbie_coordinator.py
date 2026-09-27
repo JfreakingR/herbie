@@ -6,8 +6,12 @@ this process stops renewing its short lease.
 
 With --neck it also drives Herbie's neck (the camera wheel on his head): each
 cycle it tells the phone which way the head faces and takes any look a brain
-asked for, then turns the wheel through tools/Herbie-Look.py. That is the only
-actuator it can reach. The wheels stay off - there is no drive path here.
+asked for, then turns the wheel through tools/Herbie-Look.py.
+
+With --drive it also drives his tracks: it takes one move at a time that a
+brain asked for (at most two seconds each) and sends it through
+tools/Send-Herbie-Frame.py. Without --drive the tracks have no path at all.
+Neck and tracks share the motor board, so only one of them runs at a time.
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ DEFAULT_INTERVAL = 5.0
 DEFAULT_LEASE = 15
 SOURCE = "windows-computer"
 LOOK_TOOL = Path(__file__).resolve().parent.parent / "tools" / "Herbie-Look.py"
+FRAME_TOOL = Path(__file__).resolve().parent.parent / "tools" / "Send-Herbie-Frame.py"
+# Settle time after a move's own duration, before the next frame is sent.
+DRIVE_SETTLE_S = 0.5
 
 
 def private_directory() -> Path:
@@ -194,6 +201,8 @@ class NeckController:
     def __init__(self, look_module: Any | None = None) -> None:
         self._look = look_module
         self._thread: threading.Thread | None = None
+        # The drive controller, when there is one: it shares the motor board.
+        self.other: Any = None
 
     @property
     def look(self) -> Any:
@@ -215,7 +224,7 @@ class NeckController:
 
     def poll(self, endpoint: str, token: str) -> int | None:
         """Check in with the phone; start a turn if a look was waiting."""
-        busy = self.busy()
+        busy = self.busy() or (self.other is not None and self.other.busy())
         facing = self.facing()
         response = request_json(
             endpoint,
@@ -239,6 +248,95 @@ class NeckController:
         )
         self._thread.start()
         return degrees
+
+
+def _load_tool(name: str, path: Path) -> Any:
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class DriveController:
+    """Drives the tracks for the phone, one short move per claim.
+
+    Moves run in a background thread that claims the next one as soon as the
+    last has finished, so a reply's moves follow each other closely, while a
+    "stop" on the phone drops whatever has not started. Every frame goes out
+    through Send-Herbie-Frame.py's exactly-once write, and the protocol module
+    caps its duration at two seconds whatever the phone asked for.
+    """
+
+    def __init__(self, sender: Any | None = None, sleep: Any = time.sleep) -> None:
+        self._sender = sender
+        self._sleep = sleep
+        self._thread: threading.Thread | None = None
+        self.other: Any = None          # the neck controller, if any
+
+    @property
+    def sender(self) -> Any:
+        if self._sender is None:
+            self._sender = _load_tool("send_herbie_frame", FRAME_TOOL)
+        return self._sender
+
+    def busy(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def _claim(self, endpoint: str, token: str, busy: bool) -> dict[str, Any] | None:
+        response = request_json(
+            endpoint, "/v1/drive/claim", token=token,
+            payload={"busy": busy}, timeout=4.0,
+        )
+        move = response.get("drive")
+        return move if isinstance(move, dict) else None
+
+    def drive(self, move: dict[str, Any]) -> int:
+        """Send one move and wait for it to finish. 0 = sent."""
+        sender = self.sender
+        vava = sender.vava
+        direction = str(move["direction"])
+        ms = int(move["ms"])
+        target = os.environ.get("HERBIE_ADB_TARGET", sender.USB_SERIAL)
+        if not sender.ensure_link(target):
+            print(f"drive: cannot reach {target}", file=sys.stderr, flush=True)
+            return 1
+        sequence = int(time.time() * 10) % 0xFF + 1           # 1..255, never 0
+        frame = vava.to_wire(vava.move(direction, ms, sequence))
+        print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} drive: {direction} {ms} ms", flush=True)
+        result = sender.send_frame(target, frame, show_log=False)
+        self._sleep(min(ms, vava.MAX_DURATION_MS) / 1000 + DRIVE_SETTLE_S)
+        return result
+
+    def _run(self, endpoint: str, token: str, first: dict[str, Any]) -> None:
+        move: dict[str, Any] | None = first
+        while move is not None:
+            if self.drive(move) != 0:
+                # Never sent, or unclear whether it was: drop the rest
+                # rather than drive on from an unknown position.
+                try:
+                    request_json(endpoint, "/v1/drive/stop", token=token,
+                                 payload={}, timeout=4.0)
+                except Exception:
+                    pass
+                return
+            try:
+                move = self._claim(endpoint, token, busy=False)
+            except Exception as exc:
+                print(f"drive: check-in failed: {exc}", file=sys.stderr, flush=True)
+                return
+
+    def poll(self, endpoint: str, token: str) -> dict[str, Any] | None:
+        """Check in with the phone; start driving if a move was waiting."""
+        busy = self.busy() or (self.other is not None and self.other.busy())
+        move = self._claim(endpoint, token, busy)
+        if move is None or busy:
+            return None
+        self._thread = threading.Thread(
+            target=self._run, args=(endpoint, token, move),
+            name="herbie-drive", daemon=True,
+        )
+        self._thread.start()
+        return move
 
 
 def run_once(
@@ -266,6 +364,7 @@ def run_forever(
     lease_seconds: int,
     brain_url: str | None = None,
     neck: NeckController | None = None,
+    drive: DriveController | None = None,
 ) -> None:
     token = load_token()
     current = endpoint
@@ -280,6 +379,11 @@ def run_forever(
                 except Exception as exc:
                     # A neck hiccup must never cost the lease.
                     print(f"neck: check-in failed: {exc}", file=sys.stderr, flush=True)
+            if drive is not None:
+                try:
+                    drive.poll(current, token)
+                except Exception as exc:
+                    print(f"drive: check-in failed: {exc}", file=sys.stderr, flush=True)
             print(
                 f"{time.strftime('%Y-%m-%d %H:%M:%S')} connected={current} "
                 f"active={coordination['active_brain']} fallback=ready",
@@ -316,6 +420,11 @@ def main() -> int:
         action="store_true",
         help="let Herbie's brains turn his neck (the camera wheel) through this PC",
     )
+    parser.add_argument(
+        "--drive",
+        action="store_true",
+        help="let Herbie's brains drive his tracks, in moves of at most 2 s, through this PC",
+    )
     args = parser.parse_args()
     if not 1.0 <= args.interval <= 30.0:
         parser.error("--interval must be between 1 and 30 seconds")
@@ -328,7 +437,12 @@ def main() -> int:
     neck = NeckController() if args.neck else None
     if neck is not None:
         print(f"neck: enabled, facing {neck.facing()}", flush=True)
-    run_forever(args.phone, args.interval, args.lease, args.brain_url, neck)
+    drive = DriveController() if args.drive else None
+    if drive is not None:
+        print("drive: enabled - moves of at most 2 s, one at a time", flush=True)
+    if neck is not None and drive is not None:
+        neck.other, drive.other = drive, neck
+    run_forever(args.phone, args.interval, args.lease, args.brain_url, neck, drive)
     return 0
 
 

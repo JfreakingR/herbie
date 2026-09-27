@@ -315,6 +315,49 @@ class ApiTokenTests(unittest.TestCase):
             self._post("/v1/neck/claim", {"facing": 0})
         self.assertEqual(err.exception.code, 401)
 
+    def test_brain_drives_only_while_the_controller_is_live_and_stop_wins(self):
+        from unittest import mock
+        import herbie_drive
+
+        self.brain.DRIVE = herbie_drive.DriveState()
+        token = "test-token-value"
+        seen = []
+
+        def chat(message, reply):
+            def fake_route(payload, **kwargs):
+                seen.append(kwargs["skills"])
+                return {"text": reply, "brain": "cloud"}
+            with mock.patch.object(self.brain.herbie_chat, "route_chat", side_effect=fake_route), \
+                    mock.patch.object(self.brain.herbie_recall, "learn_in_background"), \
+                    mock.patch.object(self.brain.herbie_recall, "save_dialogue"):
+                return json.loads(self._post("/v1/chat", {"message": message}, token).read())
+
+        # No controller: the tag is stripped and nothing is queued.
+        body = chat("come here", "On my way! [drive forward 1]")
+        self.assertEqual(body["text"], "On my way!")
+        self.assertNotIn("drive", body)
+        self.assertNotIn(herbie_drive.DRIVE_SKILL, seen[-1])
+
+        claim = json.loads(self._post("/v1/drive/claim", {"busy": False}, token).read())
+        self.assertIsNone(claim["drive"])
+
+        body = chat("spin round and come here", "Wheee! [drive left 2] [drive forward 1.5]")
+        self.assertIn(herbie_drive.DRIVE_SKILL, seen[-1])
+        self.assertEqual(body["drive"]["moves"], [{"direction": "left", "ms": 2000},
+                                                  {"direction": "forward", "ms": 1500}])
+        first = json.loads(self._post("/v1/drive/claim", {}, token).read())["drive"]
+        self.assertEqual((first["direction"], first["ms"]), ("left", 2000))
+
+        # "Stop" drops the rest, and that reply cannot drive even if it tries.
+        body = chat("stop!", "Okay okay. [drive backward 1]")
+        self.assertNotIn(herbie_drive.DRIVE_SKILL, seen[-1])
+        self.assertNotIn("drive", body)
+        self.assertIsNone(json.loads(self._post("/v1/drive/claim", {}, token).read())["drive"])
+
+        with self.assertRaises(urllib.error.HTTPError) as err:
+            self._post("/v1/drive/claim", {})
+        self.assertEqual(err.exception.code, 401)
+
     def test_see_answers_from_a_photo_and_waits_for_a_turn(self):
         from unittest import mock
         import herbie_neck

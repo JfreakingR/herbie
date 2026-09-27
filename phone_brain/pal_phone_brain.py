@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 import herbie_autonomic
 import herbie_chat
 import herbie_cloud
+import herbie_drive
 import herbie_eyes
 import herbie_recall
 import herbie_memory
@@ -26,9 +27,10 @@ import herbie_neck
 import herbie_voice
 
 
-SERVICE_VERSION = "0.13.2"
+SERVICE_VERSION = "0.14.0"
 AUTONOMIC = herbie_autonomic.AutonomicLoop()
 NECK = herbie_neck.NeckState()
+DRIVE = herbie_drive.DriveState()
 TOKEN_PATH = Path(
     os.environ.get(
         "HERBIE_TOKEN_FILE",
@@ -247,6 +249,9 @@ class PalHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/neck":
             self.send_json(200, NECK.snapshot())
             return
+        if parsed.path == "/v1/drive":
+            self.send_json(200, DRIVE.snapshot())
+            return
         if parsed.path == "/v1/urge":
             # Peek without claiming, so a poller cannot silently swallow one.
             state = herbie_memory.autonomic_snapshot()
@@ -306,6 +311,8 @@ class PalHandler(BaseHTTPRequestHandler):
             "/v1/autonomic",
             "/v1/speak/stop",
             "/v1/neck/claim",
+            "/v1/drive/claim",
+            "/v1/drive/stop",
         }:
             self.send_json(404, {"error": "not_found"})
             return
@@ -364,6 +371,11 @@ class PalHandler(BaseHTTPRequestHandler):
             response["acknowledged"] = True
             response["coordination"] = coordination_snapshot()
         elif self.path == "/v1/chat":
+            # "Stop" from a person drops any move not yet started, before a
+            # brain is even asked, and this reply cannot start new ones.
+            stop_said = herbie_drive.says_stop(str(request.get("message", "")))
+            if stop_said:
+                DRIVE.stop()
             coordination = coordination_snapshot()
             with STATE_LOCK:
                 computer_url = STATE["primary_inference_url"]
@@ -399,8 +411,13 @@ class PalHandler(BaseHTTPRequestHandler):
             eyes_ok = camera_ok and herbie_cloud.load_config() is not None
             if neck_line:
                 context_lines.append(neck_line)
+            # Driving is offered only while the computer's drive controller
+            # (started by the owner with -Drive) is checking in.
+            drive_ok = DRIVE.available() and not stop_said
             context = "\n".join(context_lines)
             skills = []
+            if drive_ok:
+                skills.append(herbie_drive.DRIVE_SKILL)
             if neck_line:
                 skills.append(herbie_neck.NECK_SKILL)
             if eyes_ok:
@@ -426,6 +443,9 @@ class PalHandler(BaseHTTPRequestHandler):
             # they are never spoken or remembered; only a live neck acts on one.
             response["text"], look = herbie_neck.extract_look(response["text"])
             response["text"], see = herbie_eyes.extract_see(response["text"])
+            response["text"], moves = herbie_drive.extract_drive(response["text"])
+            if moves and drive_ok:
+                response["drive"] = {"moves": moves, "request_id": DRIVE.request(moves)}
             question = request["message"].strip()
             if eyes_ok and not see and herbie_eyes.asks_to_see(question):
                 # Asked plainly to look: look, and drop a reply that guessed
@@ -471,6 +491,17 @@ class PalHandler(BaseHTTPRequestHandler):
             if owed is not None:
                 start_see_after_turn(owed)
             response = {"look": claimed, "motor_authority": False}
+        elif self.path == "/v1/drive/claim":
+            # The computer's drive controller checks in and takes the next
+            # move, one at a time, so a "stop" drops the rest.
+            try:
+                move = DRIVE.claim(request.get("busy", False))
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+                return
+            response = {"drive": move}
+        elif self.path == "/v1/drive/stop":
+            response = {"dropped": DRIVE.stop()}
         elif self.path == "/v1/remember":
             try:
                 response = herbie_memory.remember(request)

@@ -91,5 +91,60 @@ class NeckControllerTests(unittest.TestCase):
         self.assertIsNone(sent.call_args.kwargs["payload"]["facing"])
 
 
+class FakeSender:
+    USB_SERIAL = "board"
+
+    def __init__(self, result=0):
+        import importlib
+        import sys
+        sys.path.insert(0, str(coordinator.FRAME_TOOL.parent.parent / "phone_brain"))
+        self.vava = importlib.import_module("herbie_vava_protocol")
+        self.result = result
+        self.frames = []
+
+    def ensure_link(self, target):
+        return True
+
+    def send_frame(self, target, frame, show_log=True):
+        self.frames.append(frame)
+        return self.result
+
+
+class DriveControllerTests(unittest.TestCase):
+    def run_poll(self, replies, result=0, other_busy=False):
+        sender = FakeSender(result)
+        controller = coordinator.DriveController(sender, sleep=lambda s: None)
+        if other_busy:
+            controller.other = mock.Mock(busy=mock.Mock(return_value=True))
+        with mock.patch.object(coordinator, "request_json", side_effect=replies) as sent:
+            started = controller.poll("http://phone:8765", "t")
+            if controller._thread is not None:
+                controller._thread.join(2)
+        return started, sent, sender
+
+    def test_drives_each_claimed_move_until_none_are_left(self):
+        moves = [{"direction": "left", "ms": 500}, {"direction": "forward", "ms": 1500}]
+        started, sent, sender = self.run_poll(
+            [{"drive": moves[0]}, {"drive": moves[1]}, {"drive": None}])
+        self.assertEqual(started, moves[0])
+        self.assertEqual(len(sender.frames), 2)
+        self.assertEqual([c.args[1] for c in sent.call_args_list], ["/v1/drive/claim"] * 3)
+        parsed = sender.vava.parse_frame(sender.frames[1])
+        self.assertEqual(parsed["payload"][:2], bytes([sender.vava.SERVO_DRIVE,
+                                                      sender.vava.DRIVE_ACTIONS["forward"]]))
+
+    def test_an_unclear_send_stops_the_rest(self):
+        started, sent, sender = self.run_poll(
+            [{"drive": {"direction": "forward", "ms": 1000}}, {}], result=3)
+        self.assertEqual(len(sender.frames), 1)
+        self.assertEqual(sent.call_args_list[-1].args[1], "/v1/drive/stop")
+
+    def test_waits_while_the_neck_is_turning(self):
+        started, sent, sender = self.run_poll([{"drive": None}], other_busy=True)
+        self.assertIsNone(started)
+        self.assertEqual(sent.call_args.kwargs["payload"], {"busy": True})
+        self.assertEqual(sender.frames, [])
+
+
 if __name__ == "__main__":
     unittest.main()

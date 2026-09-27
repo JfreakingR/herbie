@@ -16,7 +16,7 @@ the VAVA motor board); this module is the phone's side of that arrangement:
   recently (``available``), so Herbie is never told he can look when nothing
   would happen.
 
-It covers the neck only. The wheels stay under motor_authority, which is off.
+It covers the neck only; driving is herbie_drive, offered separately.
 Pure logic, no I/O: the service and the controller do the talking.
 """
 
@@ -32,7 +32,7 @@ CONTROLLER_TIMEOUT_S = 30.0     # no check-in for this long = no neck
 REQUEST_TTL_S = 120.0           # an unclaimed wish to look goes stale
 
 NECK_SKILL = (
-    "Your wheels stay off, but you can turn your head: a wheel on top of you. "
+    "You can turn your head: it sits on a wheel on top of you. "
     "It turns only one way, slowly, about ten seconds per 22.5 degrees, so a "
     "full turn behind you takes over a minute. To turn it, put [look N] "
     "anywhere in your reply, where N is 0 to 359 degrees from straight ahead in "

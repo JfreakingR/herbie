@@ -2,7 +2,7 @@
 
 This is Herbie's safety-bounded core service on the Galaxy S21 Ultra. It uses only Python's standard library and listens on the phone's loopback interface. Windows or a future local bridge reaches it through an authenticated ADB forward.
 
-Version 0.13 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router, and a neck the brains can turn through the PC (see Neck below). It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
+Version 0.13 provides an internal SQLite autobiographical memory, persistent self-model, drives, slowly evolving personality traits, live expression state, privacy mode, owner memory rights, full-text memory search, an autonomic layer (drives, mood, circadian rhythm, initiative), a mood-driven local voice, opt-in local Wi-Fi, and a leased computer-primary/phone-fallback conversation router, a neck the brains can turn through the PC (see Neck below), and tracks they can drive through it when the owner allows (see Driving). It also keeps a bounded 12-message recent-dialogue window so PC replies continue naturally across turns. These remain on the Galaxy. Personality changes are small, bounded, and recorded with their reason; experience cannot rewrite Herbie's identity principles or motor-safety state.
 
 ## Authentication
 
@@ -158,8 +158,26 @@ can turn their head by writing `[look N]` in a reply, and the context says
 which way the head faces. `herbie_neck.py` strips every such tag before a reply
 is stored or spoken, and queues the last one for the controller. With no
 controller, or in privacy mode, the skill is not offered and tags are simply
-dropped. The small phone-local model is not given the skill. Wheels remain
-under `motor_authority`, which stays off.
+dropped. The small phone-local model is not given the skill.
+
+## Driving
+
+His tracks are driven the same way, by the coordinator started with `--drive`
+(`tools\Start-Herbie-Coordinator.ps1 -Drive`, usually with `-Neck` too). Without
+that flag there is no path from any brain to the tracks.
+
+While the drive controller checks in, the cloud and computer brains may write
+`[drive forward N]`, `backward`, `left` or `right` (N = 0.2 to 2 seconds, left
+and right spin on the spot), up to three per reply. `herbie_drive.py` strips
+the tags and hands the controller one move per check-in; the controller sends
+each through `Send-Herbie-Frame.py`'s exactly-once write, and the protocol
+module caps every move at 2 s. A person saying "stop", "halt", "freeze",
+"whoa" or "don't move" drops every move not yet started, and that reply cannot
+drive. A move whose send is unclear drops the rest. Moves older than 20 s are
+dropped as stale. His own urges never drive him - only replies to a person.
+Neck and tracks share the motor board, so only one runs at a time. The
+`motor_authority: false` fields mean the phone itself has no motor path; the
+owner-started PC controller is the only one.
 
 ## Eyes
 

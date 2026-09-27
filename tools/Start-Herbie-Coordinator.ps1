@@ -1,6 +1,6 @@
 <# Start Herbie's computer-primary lease coordinator in the background. #>
 [CmdletBinding()]
-param([string]$Phone, [switch]$Neck)
+param([string]$Phone, [switch]$Neck, [switch]$Drive)
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path $PSScriptRoot -Parent
@@ -69,6 +69,8 @@ $arguments = @($Coordinator)
 if ($Phone) { $arguments += @('--phone', $Phone) }
 # -Neck lets Herbie's brains turn his neck (the camera wheel) through this PC.
 if ($Neck) { $arguments += @('--neck') }
+# -Drive lets Herbie's brains drive his tracks, moves of at most 2 s each.
+if ($Drive) { $arguments += @('--drive') }
 $process = Start-Process -FilePath $Python -ArgumentList $arguments `
     -WindowStyle Hidden -RedirectStandardOutput $LogFile `
     -RedirectStandardError $ErrorLog -PassThru
