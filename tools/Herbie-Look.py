@@ -8,7 +8,8 @@ Usage:
     python tools/Herbie-Look.py step [n]     turn n steps (default 1)
 
 One step is one spoke of the wheel's 16: 22.5 degrees, so 90 is 4 steps and
-180 is 8 (owner-measured 2026-09-27). Other angles round to the nearest step.
+180 is 8 (owner-measured 2026-09-27; `180` then `0` landed exactly back on
+the start mark). Other angles round to the nearest step.
 The wheel is only known to turn one way, so asking for an angle "behind"
 him goes forward the long way round. Angles count in that direction.
 
