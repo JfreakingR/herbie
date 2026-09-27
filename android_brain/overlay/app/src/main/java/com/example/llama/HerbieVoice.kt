@@ -156,7 +156,7 @@ class HerbieVoice(context: Context) {
         var track: AudioTrack? = null
         try {
             if (connection.responseCode != 200) {
-                Log.w(TAG, "ElevenLabs stream HTTP ${connection.responseCode}")
+                Log.w(TAG, "ElevenLabs stream HTTP ${connection.responseCode} ${whyRefused(connection)}")
                 return null
             }
             streamConnection = connection
@@ -219,6 +219,18 @@ class HerbieVoice(context: Context) {
         }
     }
 
+    /**
+     * ElevenLabs' own reason for a refusal, e.g. quota_exceeded or
+     * invalid_api_key - both come back as HTTP 401. Never includes the key.
+     */
+    private fun whyRefused(connection: HttpURLConnection): String = runCatching {
+        val body = connection.errorStream?.use { String(it.readBytes(), StandardCharsets.UTF_8) }
+            ?: return@runCatching ""
+        val detail = JSONObject(body).opt("detail")
+        if (detail is JSONObject) detail.optString("status").ifEmpty { detail.optString("message") }
+        else detail?.toString().orEmpty()
+    }.getOrDefault("").take(200)
+
     /** The utterance as ElevenLabs audio, or null to use the on-phone voice. */
     private fun renderWithElevenLabs(text: String): File? {
         val connection = elevenLabsRequest(
@@ -226,7 +238,7 @@ class HerbieVoice(context: Context) {
         ) ?: return null
         return try {
             if (connection.responseCode != 200) {
-                Log.w(TAG, "ElevenLabs HTTP ${connection.responseCode}; using the phone voice")
+                Log.w(TAG, "ElevenLabs HTTP ${connection.responseCode} ${whyRefused(connection)}; using the phone voice")
                 return null
             }
             val file = File(cacheDir, "utterance.mp3")
