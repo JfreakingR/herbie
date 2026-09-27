@@ -9,11 +9,16 @@ Usage:
     python tools/Send-Herbie-Frame.py <direction> <duration_ms> [sequence]
     python tools/Send-Herbie-Frame.py treat [sequence]
     python tools/Send-Herbie-Frame.py feed <portions> [sequence]
+    python tools/Send-Herbie-Frame.py wheel <action> <duration_ms> [sequence]
 
     treat        turn the treat wheel one step - the factory self-test's own
                  `toggle_peripheral,0,0,4,1,0` (peripheral 4, snack_lattices)
     feed         the app's scheduled-feed command instead: peripheral 7,
                  instant_feeding, 1..3 portions. Try `treat` first.
+    wheel        EXPERIMENT: the treat wheel's command with other numbers.
+                 `treat` is `wheel 1 0`. Does action 2 mean two steps? Does a
+                 duration run the motor that long? Unknown - watch it.
+                 action 1..9, duration 0..3000 ms.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
                  Only `forward` is physically confirmed as of 2026-09-19.
@@ -176,7 +181,7 @@ def send_frame(target, frame, show_log=True):
 
 def main(argv):
     verb = argv[1] if len(argv) > 1 else ""
-    nargs = {"treat": 0, "feed": 1}.get(verb, 1)   # args before [sequence]
+    nargs = {"treat": 0, "feed": 1, "wheel": 2}.get(verb, 1)   # args before [sequence]
     if not 2 + nargs <= len(argv) <= 3 + nargs:
         print(__doc__)
         return 2
@@ -196,6 +201,12 @@ def main(argv):
     try:
         if verb == "treat":
             frame = vava.treat_wheel(sequence)
+        elif verb == "wheel":
+            action, duration = int(argv[2]), int(argv[3])
+            if not 1 <= action <= 9 or not 0 <= duration <= 3000:
+                raise ValueError("wheel_out_of_range - action 1..9, duration 0..3000")
+            frame = vava.toggle_peripheral(vava.PERIPHERAL_SNACK_LATTICES,
+                                           action, duration, sequence)
         elif verb == "feed":
             frame = vava.feed(int(argv[2]), sequence)
         else:
