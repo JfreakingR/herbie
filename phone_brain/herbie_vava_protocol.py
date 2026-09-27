@@ -203,10 +203,13 @@ TREAT_WHEEL_STEP = 1          # action the self-test sends to peripheral 4
 MAX_FEED_PORTIONS = 3         # cap on instant_feeding portions per frame
 
 # Herbie's neck is the treat wheel with a camera on it. Owner-measured on
-# 2026-09-27: 18 treat_wheel() frames make one full turn, so 20 degrees each.
-# Only one direction is known (action 1); whether it can reverse is untested,
-# so turning "left" means going the long way round.
-NECK_STEPS_PER_TURN = 18
+# 2026-09-27: every treat_wheel() frame moves the rim a fixed ~2 inches on a
+# ~6 inch wheel, so about 9 steps make a full turn - 40 degrees each. (A first
+# count of 18 was commands, not moves: the wheel ignores a frame that arrives
+# within roughly 7-13 s of its last move, and still acks it.) The board also
+# ignores action and duration for this peripheral. Only one direction is
+# known, so turning "left" means going the long way round.
+NECK_STEPS_PER_TURN = 9
 NECK_DEGREES_PER_STEP = 360 // NECK_STEPS_PER_TURN
 
 # The drive cap is deliberately short: this is the last point before bytes reach
@@ -334,7 +337,7 @@ def neck_steps_to(current_step: int, degrees: int) -> int:
     """How many forward steps turn the neck from `current_step` to `degrees`.
 
     Angles are measured in the wheel's one known direction from wherever the
-    neck was homed, and rounded to the nearest 20-degree step. Pure maths.
+    neck was homed, and rounded to the nearest 40-degree step. Pure maths.
     """
     for name, value in (("current_step", current_step), ("degrees", degrees)):
         if isinstance(value, bool) or not isinstance(value, int):

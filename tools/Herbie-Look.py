@@ -7,7 +7,8 @@ Usage:
     python tools/Herbie-Look.py <degrees>    turn to face that angle, e.g. 90
     python tools/Herbie-Look.py step [n]     turn n steps (default 1)
 
-One step is 20 degrees; 18 steps is a full turn (owner-measured 2026-09-27).
+One step is 40 degrees; 9 steps is a full turn (owner-measured 2026-09-27).
+180 is not a whole number of steps: it rounds to 160 (4 steps).
 The wheel is only known to turn one way, so asking for an angle "behind"
 him goes forward the long way round. Angles count in that direction.
 
@@ -16,7 +17,7 @@ updated after every step that is sent. If anything turns the wheel without
 this tool (a hand, the factory app, a restart that re-centres it), or a step
 comes back AMBIGUOUS, point him forward again and run `home`.
 
-Steps are spaced HERBIE_NECK_PAUSE seconds apart (default 5): the wheel
+Steps are spaced HERBIE_NECK_PAUSE seconds apart (default 12): the wheel
 silently drops a step sent while it is still turning, though it acks it.
 
 Uses the same link as Send-Herbie-Frame.py (USB by default,
@@ -36,11 +37,11 @@ _spec.loader.exec_module(sender)
 vava = sender.vava
 
 STATE = Path.home() / ".herbie" / "neck_step.txt"
-# The wheel IGNORES a step that arrives while the last one is still turning -
-# and acks it anyway, so the ack is no proof. 2026-09-27: with ~1 s pauses a
-# 9-step turn moved only 2 steps; hand-typed commands seconds apart all moved.
-# Override with HERBIE_NECK_PAUSE (seconds) while finding the real minimum.
-STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "5"))
+# The wheel IGNORES a step that arrives too soon after its last move - and
+# acks it anyway, so the ack is no proof. 2026-09-27: at ~6.5 s per step only
+# every other step moved (~13 s apart). Override with HERBIE_NECK_PAUSE
+# (seconds) while finding the real minimum.
+STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "12"))
 
 
 def read_step():
