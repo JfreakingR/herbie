@@ -16,8 +16,9 @@ Usage:
     feed         the app's scheduled-feed command instead: peripheral 7,
                  instant_feeding, 1..3 portions. Try `treat` first.
     wheel        EXPERIMENT: the treat wheel's command with other numbers.
-                 `treat` is `wheel 1 0`. Does action 2 mean two steps? Does a
-                 duration run the motor that long? Unknown - watch it.
+                 `treat` is `wheel 1 0`. Tried 2026-09-27: `wheel 2 0`,
+                 `wheel 4 0` and `wheel 1 1000` all moved exactly as far as
+                 `treat` - the board ignores action and duration here.
                  action 1..9, duration 0..3000 ms.
 
     direction    forward | backward | left | right  (see vava.DRIVE_ACTIONS)
