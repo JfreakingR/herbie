@@ -317,7 +317,8 @@ def treat_wheel(sequence: int) -> bytes:
     """Turn the treat wheel one step: the factory self-test's own command.
 
     `toggle_peripheral,0,0,4,1,0` -> peripheral 4 (snack_lattices), action 1,
-    duration 0. Not yet physically confirmed on Herbie.
+    duration 0. Physically confirmed 2026-09-27: each frame turns the wheel
+    about half an inch at its rim (owner, sent via Send-Herbie-Frame.py).
     """
     return toggle_peripheral(PERIPHERAL_SNACK_LATTICES, TREAT_WHEEL_STEP, 0, sequence)
 
