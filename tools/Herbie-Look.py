@@ -16,6 +16,9 @@ updated after every step that is sent. If anything turns the wheel without
 this tool (a hand, the factory app, a restart that re-centres it), or a step
 comes back AMBIGUOUS, point him forward again and run `home`.
 
+Steps are spaced HERBIE_NECK_PAUSE seconds apart (default 5): the wheel
+silently drops a step sent while it is still turning, though it acks it.
+
 Uses the same link as Send-Herbie-Frame.py (USB by default,
 HERBIE_ADB_TARGET for Wi-Fi) and its exactly-once write per step.
 """
@@ -33,7 +36,11 @@ _spec.loader.exec_module(sender)
 vava = sender.vava
 
 STATE = Path.home() / ".herbie" / "neck_step.txt"
-STEP_PAUSE_S = 1.0       # let each 20-degree step finish before the next
+# The wheel IGNORES a step that arrives while the last one is still turning -
+# and acks it anyway, so the ack is no proof. 2026-09-27: with ~1 s pauses a
+# 9-step turn moved only 2 steps; hand-typed commands seconds apart all moved.
+# Override with HERBIE_NECK_PAUSE (seconds) while finding the real minimum.
+STEP_PAUSE_S = float(os.environ.get("HERBIE_NECK_PAUSE", "5"))
 
 
 def read_step():
