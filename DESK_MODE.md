@@ -13,10 +13,10 @@ see "Getting back to the body" below.
 | Voice | Galaxy TTS (Monster speaker when paired), or the screen | new choice |
 | Ears | Galaxy (Herbie Brain app, wake word "Herbie") | unchanged |
 | Eyes / neck | Galaxy camera, `Herbie-Look.py` | unchanged, optional |
-| **Face** | **7" LCD plugged into the Windows PC as a second monitor** | **new** |
+| **Face** | **7" LCD on the Pi 400 (or the Windows PC as a second monitor)** | **new** |
 | Motors, drive, battery | VAVA body | **parked** |
 
-## Start him
+## Start him from the Windows PC
 
 1. Plug the 7" LCD into the PC (HDMI + its USB power). Windows should treat it
    as an extra display — "Extend", not "Duplicate".
@@ -40,6 +40,38 @@ Options (pass after the `.cmd` or to the `.ps1`):
 
 If the Galaxy isn't connected the face still comes up; the corner reads
 "Herbie · brain offline" and he says so when you talk to him.
+
+## Pi 400 as his always-on body (recommended)
+
+The Pi 400 drives the 7" LCD and holds the Galaxy on USB, so the PC can be
+off. When the PC is on, the Galaxy still reaches its bigger model over Wi-Fi
+through the coordinator, as before.
+
+1. Flash **Raspberry Pi OS (64-bit, with desktop)** onto a 128 GB card with
+   Raspberry Pi Imager. In Imager's settings, set your user and Wi-Fi.
+2. Screen to the Pi 400's **HDMI0** port (the one next to the power jack),
+   with the screen's own USB cable for power and touch.
+3. On the PC, pull this branch, then copy onto a USB stick:
+   - the whole `herbie` folder
+   - `%USERPROFILE%\.herbie\api-token`
+   - `%USERPROFILE%\.android\adbkey` and `adbkey.pub` (the Galaxy already
+     trusts this key; a new one would need a tap on the phone's screen)
+4. On the Pi: copy `herbie` to your home folder, `api-token` into `~/.herbie/`,
+   and both `adbkey` files into `~/.android/`.
+5. Plug the Galaxy into the Pi 400 by USB, then in a terminal:
+
+   ```sh
+   cd ~/herbie && sh desk/pi400/install.sh
+   sudo reboot
+   ```
+
+After the reboot his face comes up on its own. Type on the Pi 400's keyboard
+to talk to him. If the phone is unplugged, the server redoes the ADB link
+within 15 seconds of it coming back. `HERBIE_VOICE=screen sh
+desk/pi400/install.sh` switches his voice to the screen's audio.
+
+Checks: `adb devices` should list `R5CR11QCHPY  device`;
+`journalctl --user -u herbie-desk -f` shows the server's log.
 
 ## How the face is wired
 
