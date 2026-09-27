@@ -20,6 +20,7 @@ import herbie_autonomic
 import herbie_chat
 import herbie_cloud
 import herbie_eyes
+import herbie_form
 import herbie_recall
 import herbie_memory
 import herbie_neck
@@ -65,6 +66,8 @@ API_TOKEN = load_api_token()
 MAX_BODY_BYTES = 16_384
 STARTED_AT = time.monotonic()
 STATE_LOCK = threading.Lock()
+# What shape the desk screen shows him as; display only.
+FORM = herbie_form.FormState()
 CONVERSATION_LOCK = threading.Lock()
 # Saved to disk by herbie_recall so a restart does not wipe what was just said.
 RECENT_DIALOGUE: deque[dict[str, str]] = deque(herbie_recall.load_dialogue(), maxlen=12)
@@ -222,7 +225,9 @@ class PalHandler(BaseHTTPRequestHandler):
             self.send_json(200, coordination_snapshot())
             return
         if parsed.path == "/v1/expression":
-            self.send_json(200, herbie_memory.expression_snapshot())
+            expression = herbie_memory.expression_snapshot()
+            expression["form"] = FORM.current
+            self.send_json(200, expression)
             return
         if parsed.path == "/v1/privacy":
             self.send_json(200, herbie_memory.privacy_snapshot())
@@ -399,6 +404,12 @@ class PalHandler(BaseHTTPRequestHandler):
             eyes_ok = camera_ok and herbie_cloud.load_config() is not None
             if neck_line:
                 context_lines.append(neck_line)
+            # "Turn into the moon", spoken or typed, changes his shape on the
+            # desk screen; the reply is told so he can play along.
+            new_form = herbie_form.requested(str(request.get("message", "")))
+            if new_form:
+                FORM.set(new_form)
+                context_lines.append(herbie_form.context_line(new_form))
             context = "\n".join(context_lines)
             skills = []
             if neck_line:

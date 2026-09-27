@@ -86,8 +86,11 @@ works with no internet). The older 2D face is still `index.html`: use
 - **Moods** follow the brain's expression (calm, curious, happy, playful,
   thinking, surprised, concerned, sleepy).
 - **Shapeshifting**: "turn into the sun / the moon / a football / just your
-  face", and "back to normal". Works from typed messages, or when his own
-  reply says it.
+  face", and "turn back to normal", spoken or typed. The Galaxy brain spots
+  the request in `/v1/chat` (`phone_brain/herbie_form.py`), tells the model so
+  his reply plays along, and reports the form in `/v1/expression`, which the
+  spirit polls every second. Needs the phone brain redeployed
+  (`tools/Deploy-Herbie-Phone.ps1`).
 - `?controls=1` adds mood and shape buttons for trying him out; `?lite=1`
   drops the bloom and some sparks (the Pi 400 picks this automatically).
 

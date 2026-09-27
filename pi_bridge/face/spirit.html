@@ -664,12 +664,17 @@ window.addEventListener("keydown", (e) => {
 stage.addEventListener("click", () => { ask.classList.toggle("open"); if (ask.classList.contains("open")) say.focus(); });
 
 // Voice conversations happen on the Galaxy; follow its listening/speaking state.
-let lastExpression = "";
+let lastExpression = "", lastForm = "";
 async function follow() {
   if (busy) return;
   try {
     const snap = await fetch("/v1/expression", { cache: "no-store" }).then((r) => r.json());
     if (!snap || !snap.herbie) return;
+    // Shapeshifting asked for by voice on the Galaxy arrives here.
+    if (snap.form && snap.form !== lastForm) {
+      herbie.setForm(snap.form);
+      lastForm = snap.form;
+    }
     const galaxyTalking = !!snap.speaking || performance.now() < mouthUntil;
     if (!(voice === "screen" && herbie.speaking && !snap.speaking)) herbie.speaking = galaxyTalking;
     if (snap.listening && !galaxyTalking) { herbie.setMood("listening"); lastExpression = ""; return; }
