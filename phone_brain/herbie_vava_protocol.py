@@ -202,6 +202,13 @@ PERIPHERAL_NAMES = {1: "laser_pen", 2: "bubble_machine", 3: "feeding_tray",
 TREAT_WHEEL_STEP = 1          # action the self-test sends to peripheral 4
 MAX_FEED_PORTIONS = 3         # cap on instant_feeding portions per frame
 
+# Herbie's neck is the treat wheel with a camera on it. Owner-measured on
+# 2026-09-27: 18 treat_wheel() frames make one full turn, so 20 degrees each.
+# Only one direction is known (action 1); whether it can reverse is untested,
+# so turning "left" means going the long way round.
+NECK_STEPS_PER_TURN = 18
+NECK_DEGREES_PER_STEP = 360 // NECK_STEPS_PER_TURN
+
 # The drive cap is deliberately short: this is the last point before bytes reach
 # a motor board. The head cap matches the factory self-test's 7000 ms.
 MAX_DURATION_MS = 2000
@@ -321,6 +328,19 @@ def treat_wheel(sequence: int) -> bytes:
     about half an inch at its rim (owner, sent via Send-Herbie-Frame.py).
     """
     return toggle_peripheral(PERIPHERAL_SNACK_LATTICES, TREAT_WHEEL_STEP, 0, sequence)
+
+
+def neck_steps_to(current_step: int, degrees: int) -> int:
+    """How many forward steps turn the neck from `current_step` to `degrees`.
+
+    Angles are measured in the wheel's one known direction from wherever the
+    neck was homed, and rounded to the nearest 20-degree step. Pure maths.
+    """
+    for name, value in (("current_step", current_step), ("degrees", degrees)):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"invalid_{name}")
+    target = round((degrees % 360) / NECK_DEGREES_PER_STEP) % NECK_STEPS_PER_TURN
+    return (target - current_step) % NECK_STEPS_PER_TURN
 
 
 def feed(portions: int, sequence: int) -> bytes:

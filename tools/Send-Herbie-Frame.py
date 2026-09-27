@@ -121,41 +121,12 @@ def uart_lines(target, count=6):
     return []
 
 
-def main(argv):
-    verb = argv[1] if len(argv) > 1 else ""
-    nargs = {"treat": 0, "feed": 1}.get(verb, 1)   # args before [sequence]
-    if not 2 + nargs <= len(argv) <= 3 + nargs:
-        print(__doc__)
-        return 2
-    seq_arg = argv[2 + nargs] if len(argv) > 2 + nargs else None
-    sequence = int(seq_arg, 0) if seq_arg else (int(time.time()) & 0xFF)
-    if sequence == 0:
-        # Not an error the board reports; it is simply ignored. Refusing to
-        # send it is the entire point of this script.
-        print("sequence 0 is discarded by the STM32 - pick 0x01..0xFF")
-        return 2
+def send_frame(target, frame, show_log=True):
+    """Stage one wire frame and write it to /dev/ttyMT1, exactly once.
 
-    target = os.environ.get("HERBIE_ADB_TARGET", USB_SERIAL)
-    if not ensure_link(target):
-        print(f"cannot reach {target} - check he is powered and on the network")
-        return 1
-
-    try:
-        if verb == "treat":
-            frame = vava.treat_wheel(sequence)
-        elif verb == "feed":
-            frame = vava.feed(int(argv[2]), sequence)
-        else:
-            frame = vava.move(verb, int(argv[2]), sequence)
-        frame = vava.to_wire(frame)
-    except ValueError as exc:
-        print(f"{exc} - directions: {', '.join(sorted(vava.DRIVE_ACTIONS))}; "
-              f"duration 1..{vava.MAX_DURATION_MS} ms; "
-              f"feed portions 1..{vava.MAX_FEED_PORTIONS}")
-        return 2
-    print(f"target {target}  seq 0x{sequence:02X}  {frame.hex(' ').upper()}")
-    print("   ", vava.describe(vava.parse_frame(frame)))
-
+    Returns 0 sent, 1 never sent (link/staging failed), 3 ambiguous.
+    Also used by Herbie-Look.py.
+    """
     # A fresh temp file per run. Reusing tools/.frame.bin failed on Windows
     # (OSError 22) when runs came back to back - something (antivirus, sync)
     # still held the previous run's copy.
@@ -197,9 +168,48 @@ def main(argv):
         return 3
 
     print("sent.")
-    for line in uart_lines(target):
-        print("   ", line)
+    if show_log:
+        for line in uart_lines(target):
+            print("   ", line)
     return 0
+
+
+def main(argv):
+    verb = argv[1] if len(argv) > 1 else ""
+    nargs = {"treat": 0, "feed": 1}.get(verb, 1)   # args before [sequence]
+    if not 2 + nargs <= len(argv) <= 3 + nargs:
+        print(__doc__)
+        return 2
+    seq_arg = argv[2 + nargs] if len(argv) > 2 + nargs else None
+    sequence = int(seq_arg, 0) if seq_arg else (int(time.time()) & 0xFF)
+    if sequence == 0:
+        # Not an error the board reports; it is simply ignored. Refusing to
+        # send it is the entire point of this script.
+        print("sequence 0 is discarded by the STM32 - pick 0x01..0xFF")
+        return 2
+
+    target = os.environ.get("HERBIE_ADB_TARGET", USB_SERIAL)
+    if not ensure_link(target):
+        print(f"cannot reach {target} - check he is powered and on the network")
+        return 1
+
+    try:
+        if verb == "treat":
+            frame = vava.treat_wheel(sequence)
+        elif verb == "feed":
+            frame = vava.feed(int(argv[2]), sequence)
+        else:
+            frame = vava.move(verb, int(argv[2]), sequence)
+        frame = vava.to_wire(frame)
+    except ValueError as exc:
+        print(f"{exc} - directions: {', '.join(sorted(vava.DRIVE_ACTIONS))}; "
+              f"duration 1..{vava.MAX_DURATION_MS} ms; "
+              f"feed portions 1..{vava.MAX_FEED_PORTIONS}")
+        return 2
+    print(f"target {target}  seq 0x{sequence:02X}  {frame.hex(' ').upper()}")
+    print("   ", vava.describe(vava.parse_frame(frame)))
+
+    return send_frame(target, frame)
 
 
 if __name__ == "__main__":
