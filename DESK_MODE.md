@@ -73,6 +73,24 @@ desk/pi400/install.sh` switches his voice to the screen's audio.
 Checks: `adb devices` should list `R5CR11QCHPY  device`;
 `journalctl --user -u herbie-desk -f` shows the server's log.
 
+## His face: the spirit
+
+Herbie's face is `pi_bridge/face/spirit.html`, a glowing, wispy spirit drawn
+in real-time 3D (three.js, bundled under `pi_bridge/face/vendor/three` so he
+works with no internet). The older 2D face is still `index.html`: use
+`-Look classic` on the PC, or `HERBIE_FACE_PAGE=index.html` on the Pi.
+
+- **Voice conversation** runs on the Galaxy (say "Herbie…"). The spirit
+  brightens and leans in while he listens, and pulses while he talks.
+- **Typing** anywhere opens a box; his reply shows as a glowing caption.
+- **Moods** follow the brain's expression (calm, curious, happy, playful,
+  thinking, surprised, concerned, sleepy).
+- **Shapeshifting**: "turn into the sun / the moon / a football / just your
+  face", and "back to normal". Works from typed messages, or when his own
+  reply says it.
+- `?controls=1` adds mood and shape buttons for trying him out; `?lite=1`
+  drops the bloom and some sparks (the Pi 400 picks this automatically).
+
 ## How the face is wired
 
 `pi_bridge/face/index.html` is the same animated face as before. The desk

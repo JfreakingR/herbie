@@ -3,11 +3,13 @@
    The LCD is found as the smallest monitor that is not the primary one. Pass
    -Monitor <n> (0-based, in the order Windows lists them) to pick another, or
    -List to print what Windows sees. -Voice screen makes the face speak through
-   the PC/monitor audio instead of the Galaxy's speaker. #>
+   the PC/monitor audio instead of the Galaxy's speaker. -Look classic shows the
+   older 2D face instead of the 3D spirit. #>
 [CmdletBinding()]
 param(
     [int]$Monitor = -1,
     [ValidateSet('galaxy', 'screen')][string]$Voice = 'galaxy',
+    [ValidateSet('spirit', 'classic')][string]$Look = 'spirit',
     [int]$Port = 8766,
     [switch]$List
 )
@@ -33,7 +35,8 @@ $LogFile = Join-Path $PrivateDirectory 'desk.log'
 $ErrorLog = Join-Path $PrivateDirectory 'desk-error.log'
 $PidFile = Join-Path $PrivateDirectory 'desk.pid'
 $BrowserProfile = Join-Path $PrivateDirectory 'desk-browser'
-$Url = "http://127.0.0.1:$Port/face/?kiosk=1"
+$Page = if ($Look -eq 'classic') { 'index.html' } else { 'spirit.html' }
+$Url = "http://127.0.0.1:$Port/face/$Page`?kiosk=1"
 New-Item -ItemType Directory -Path $PrivateDirectory -Force | Out-Null
 
 $pythonCandidates = @(

@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Herbie</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #03040a; overflow: hidden; cursor: none;
+    font-family: "Segoe UI", system-ui, sans-serif; user-select: none; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; }
+  #loading { position: absolute; inset: 0; display: grid; place-items: center; color: #6f7c90; }
+  #caption {
+    position: fixed; left: 6%; right: 6%; bottom: 5%; text-align: center; pointer-events: none;
+    color: #d8f3ff; font-size: clamp(16px, 2.6vw, 30px); line-height: 1.35;
+    text-shadow: 0 0 14px rgba(120, 210, 255, 0.85), 0 0 2px rgba(0, 0, 0, 0.9);
+    opacity: 0; transition: opacity 0.8s ease;
+  }
+  #caption.show { opacity: 1; }
+  #ask {
+    position: fixed; left: 50%; bottom: 6%; transform: translateX(-50%); width: min(80%, 720px);
+    display: none;
+  }
+  #ask.open { display: block; }
+  #ask input {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: clamp(16px, 2.2vw, 24px);
+    padding: 12px 20px; border-radius: 999px; border: 1px solid rgba(160, 220, 255, 0.45);
+    background: rgba(8, 16, 28, 0.75); color: #e6f7ff; outline: none;
+    box-shadow: 0 0 24px rgba(90, 190, 255, 0.35);
+  }
+  #status { position: fixed; top: 10px; right: 14px; color: rgba(160, 200, 230, 0.35); font-size: 12px; }
+  #controls { position: fixed; top: 10px; left: 10px; display: none; flex-wrap: wrap; gap: 6px; max-width: 90%; cursor: default; }
+  #controls.show { display: flex; }
+  #controls button { font: 13px system-ui; color: #dff; background: rgba(20, 40, 60, 0.7);
+    border: 1px solid rgba(150, 210, 255, 0.3); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  #controls button[aria-pressed="true"] { background: #cfeeff; color: #03040a; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="loading">Summoning Herbie…</div></div>
+<div id="caption" aria-live="polite"></div>
+<div id="ask"><input id="say" autocomplete="off" placeholder="Say something to Herbie…" aria-label="Say something to Herbie"></div>
+<div id="status"></div>
+<div id="controls">
+  <button data-mood="neutral" aria-pressed="true">Calm</button>
+  <button data-mood="happy" aria-pressed="false">Happy</button>
+  <button data-mood="curious" aria-pressed="false">Curious</button>
+  <button data-mood="surprised" aria-pressed="false">Surprised</button>
+  <button data-mood="sad" aria-pressed="false">Sad</button>
+  <button data-mood="angry" aria-pressed="false">Annoyed</button>
+  <button data-mood="sleepy" aria-pressed="false">Sleepy</button>
+  <button data-form="spirit" aria-pressed="true">Spirit</button>
+  <button data-form="sun" aria-pressed="false">Sun</button>
+  <button data-form="moon" aria-pressed="false">Moon</button>
+  <button data-form="football" aria-pressed="false">Football</button>
+  <button data-form="face" aria-pressed="false">Just a face</button>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/build/three.module.js",
+  "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const stage = document.getElementById("stage");
+const params = new URLSearchParams(location.search);
+const lite = params.get("lite") === "1" ||
+  (params.get("lite") !== "0" && /aarch64|armv7|arm64/i.test(navigator.userAgent) && (navigator.hardwareConcurrency || 8) <= 4);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(lite ? 1 : Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0x03040a, 1);
+stage.appendChild(renderer.domElement);
+document.getElementById("loading").remove();
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1024 / 600, 0.1, 60);
+camera.position.set(0, 0.2, 8.5);
+
+/* ---------- shared GLSL noise (Ashima simplex 3D) ---------- */
+const NOISE = `
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+  vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+2.0*C.xxx; vec3 x3=x0-1.0+3.0*C.xxx;
+  i=mod(i,289.0);
+  vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+  float n_=1.0/7.0; vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.0*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+  vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+  vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+  vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+  return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+}`;
+
+/* ---------- mist behind him ---------- */
+const mistUniforms = { uTime: { value: 0 }, uColor: { value: new THREE.Color(0.25, 0.55, 0.9) } };
+const mist = new THREE.Mesh(
+  new THREE.PlaneGeometry(26, 15),
+  new THREE.ShaderMaterial({
+    uniforms: mistUniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: NOISE + `
+      uniform float uTime; uniform vec3 uColor; varying vec2 vUv;
+      void main(){
+        vec2 p = vUv*vec2(3.2,1.9);
+        float n = 0.0, a = 0.55;
+        for(int i=0;i<4;i++){ n += a*snoise(vec3(p, uTime*0.045 + float(i)*7.1)); p = p*2.03 + vec2(uTime*0.02,0.0); a *= 0.5; }
+        n = smoothstep(-0.2, 0.9, n);
+        float vign = smoothstep(0.95, 0.15, distance(vUv, vec2(0.5,0.45)));
+        gl_FragColor = vec4(uColor * n * 0.11 * vign, 1.0);
+      }`,
+  }),
+);
+mist.position.z = -4;
+scene.add(mist);
+
+/* ---------- the spirit's body ---------- */
+const spirit = new THREE.Group();
+scene.add(spirit);
+const bodyUniforms = {
+  uTime: { value: 0 }, uLevel: { value: 0 }, uGlow: { value: 1 },
+  uRim: { value: new THREE.Color(0.55, 0.9, 1.0) }, uCore: { value: new THREE.Color(0.15, 0.35, 0.65) },
+};
+const bodyMat = new THREE.ShaderMaterial({
+  uniforms: bodyUniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: NOISE + `
+    uniform float uTime; uniform float uLevel;
+    varying vec3 vNormal; varying vec3 vView; varying float vY; varying vec3 vPos;
+    void main(){
+      vec3 p = position;
+      float tail = smoothstep(0.1, -1.0, p.y);
+      p.y = p.y < 0.0 ? p.y * (1.0 + tail * 1.9) : p.y;
+      float taper = mix(1.0, 0.16, smoothstep(0.0, -2.8, p.y));
+      p.xz *= taper;
+      float sway = smoothstep(-0.2, -2.8, p.y);
+      p.x += sin(uTime*1.3 + p.y*2.2) * 0.34 * sway + sin(uTime*2.3 + p.y*4.5) * 0.08 * sway;
+      p.z += cos(uTime*1.1 + p.y*1.7) * 0.2 * sway;
+      p += normal * snoise(vec3(p*1.4 + vec3(0.0, uTime*0.45, uTime*0.25))) * (0.06 + 0.22*sway);
+      p *= 1.0 + sin(uTime*1.7)*0.012 + uLevel*0.03;
+      vY = p.y; vPos = p;
+      vec4 mv = modelViewMatrix * vec4(p,1.0);
+      vNormal = normalize(normalMatrix * normal);
+      vView = normalize(-mv.xyz);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: NOISE + `
+    uniform float uTime; uniform float uLevel; uniform float uGlow; uniform vec3 uRim; uniform vec3 uCore;
+    varying vec3 vNormal; varying vec3 vView; varying float vY; varying vec3 vPos;
+    void main(){
+      float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vView))), 2.3);
+      float n = snoise(vPos*2.2 + vec3(0.0, -uTime*0.6, uTime*0.2));
+      // long streaks that flow down the body into the tail
+      float streak = snoise(vPos*vec3(4.5,0.7,4.5) + vec3(0.0,uTime*1.1,0.0));
+      float wisps = smoothstep(0.35, 0.95, streak) + 0.5*smoothstep(0.5, 1.0, snoise(vPos*vec3(9.0,1.5,9.0) + vec3(0.0,uTime*1.6,0.0)));
+      float fade = smoothstep(-3.4, -0.3, vY + n*0.6);
+      float erode = smoothstep(-0.55, 0.25, n + vY*0.18 + 0.35);
+      float a = (fres*1.05 + 0.02 + wisps*0.32 + n*0.03) * fade * erode;
+      vec3 col = mix(uCore, uRim, clamp(fres*1.2 + wisps*0.3, 0.0, 1.0));
+      col *= (0.9 + uLevel*0.9) * uGlow;
+      gl_FragColor = vec4(col * a, 1.0);
+    }`,
+});
+const body = new THREE.Mesh(new THREE.SphereGeometry(1, lite ? 96 : 160, lite ? 96 : 160), bodyMat);
+spirit.add(body);
+
+// A soft light inside him that breathes
+function glowSprite(size, inner, outer) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, inner); grad.addColorStop(0.4, outer); grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false,
+  }));
+  sp.scale.set(size, size, 1);
+  return sp;
+}
+const core = glowSprite(2.6, "rgba(150,215,255,0.28)", "rgba(50,120,220,0.08)");
+core.position.set(0, 0.05, -0.1);
+spirit.add(core);
+const halo = glowSprite(7.5, "rgba(80,160,255,0.09)", "rgba(40,90,200,0.035)");
+halo.position.set(0, -0.3, -0.6);
+spirit.add(halo);
+
+/* ---------- forms he can take: 1 sun, 2 moon, 3 football ---------- */
+const formUniforms = { uTime: { value: 0 }, uForm: { value: 1 }, uReveal: { value: 0 } };
+const formMat = new THREE.ShaderMaterial({
+  uniforms: formUniforms, transparent: true,
+  vertexShader: `
+    uniform float uForm; varying vec3 vUnit; varying vec3 vNormal; varying vec3 vView;
+    void main(){
+      vUnit = position;
+      vec3 p = position * 1.05;
+      if (uForm > 2.5) {
+        float k = 0.5 + 0.5*(1.0 - position.x*position.x);
+        p = vec3(position.x*1.55, position.y*0.92*k, position.z*0.92*k);
+      }
+      vec4 mv = modelViewMatrix * vec4(p,1.0);
+      vNormal = normalize(normalMatrix * normalize(uForm > 2.5 ? vec3(position.x*0.5, position.y, position.z) : position));
+      vView = normalize(-mv.xyz);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: NOISE + `
+    uniform float uTime; uniform float uForm; uniform float uReveal;
+    varying vec3 vUnit; varying vec3 vNormal; varying vec3 vView;
+    void main(){
+      float d = snoise(vUnit*2.6 + vec3(0.0, uTime*0.3, 0.0))*0.5 + 0.5;
+      if (d > uReveal) discard;
+      vec3 N = normalize(vNormal);
+      float fres = pow(1.0 - max(dot(N, normalize(vView)), 0.0), 2.0);
+      vec3 L = normalize(vec3(-0.55, 0.5, 0.75));
+      float lit = max(dot(N, L), 0.0);
+      vec3 col; vec3 edge;
+      if (uForm < 1.5) {                       // sun: churning plasma
+        float t1 = snoise(vUnit*3.0 + vec3(uTime*0.35, -uTime*0.25, uTime*0.2));
+        float t2 = snoise(vUnit*7.0 - vec3(uTime*0.5, 0.0, uTime*0.4));
+        float heat = clamp(0.55 + 0.35*t1 + 0.2*t2, 0.0, 1.0);
+        col = mix(vec3(0.75,0.18,0.02), vec3(1.0,0.62,0.18), heat) * (0.55 + heat*0.45) + vec3(1.0,0.55,0.15)*fres*1.8;
+        edge = vec3(1.0,0.8,0.4);
+      } else if (uForm < 2.5) {                // moon: pale, cratered, side-lit
+        float maria = smoothstep(0.1, 0.6, snoise(vUnit*1.6 + 3.0));
+        float crater = smoothstep(0.5, 0.8, snoise(vUnit*5.5 + 11.0));
+        float grain = snoise(vUnit*18.0)*0.05;
+        vec3 rock = vec3(0.78,0.8,0.86) * (1.0 - maria*0.28 - crater*0.2 + grain);
+        col = rock * (0.06 + 0.5*lit) + vec3(0.55,0.65,0.95)*fres*0.45;
+        edge = vec3(0.8,0.9,1.0);
+      } else {                                 // football: leather, laces, stripes
+        float pebble = snoise(vUnit*40.0)*0.06;
+        vec3 leather = vec3(0.47,0.22,0.1) * (1.0 + pebble);
+        float stripe = step(0.62, abs(vUnit.x)) * step(abs(vUnit.x), 0.72);
+        float front = step(0.0, vUnit.z);
+        float seam = front * step(abs(vUnit.y), 0.035) * step(abs(vUnit.x), 0.42);
+        float stitch = front * step(abs(vUnit.y), 0.14) * step(abs(vUnit.x), 0.36) * step(fract(vUnit.x*9.0 + 0.5), 0.28);
+        vec3 base = mix(leather, vec3(0.95), max(stripe, max(seam, stitch)));
+        col = base * (0.18 + 0.95*lit) + vec3(1.0,0.8,0.6)*pow(max(dot(reflect(-L, N), normalize(vView)),0.0), 24.0)*0.35;
+        edge = vec3(1.0,0.75,0.45);
+      }
+      float rim = smoothstep(uReveal - 0.07, uReveal, d);
+      col = mix(col, edge * 2.6, rim);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const form = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), formMat);
+form.position.z = -0.02;
+spirit.add(form);
+const corona = glowSprite(5.2, "rgba(255,170,70,0.4)", "rgba(255,110,30,0.12)");
+corona.position.z = -0.3;
+corona.material.opacity = 0;
+spirit.add(corona);
+
+const FORMS = {
+  spirit:   { id: 0, rim: null },
+  sun:      { id: 1, rim: [1.0, 0.9, 0.62], core: [0.6, 0.3, 0.08], motes: [1.0, 0.75, 0.4] },
+  moon:     { id: 2, rim: [0.75, 0.88, 1.0], core: [0.12, 0.16, 0.34], motes: [0.7, 0.8, 1.0] },
+  football: { id: 3, rim: [1.0, 0.86, 0.6], core: [0.3, 0.18, 0.08], motes: [1.0, 0.85, 0.6] },
+  face:     { id: 0, rim: null, noBody: true },
+};
+let wantForm = "spirit", haveForm = "spirit", reveal = 0;
+document.querySelectorAll("[data-form]").forEach((b) => b.addEventListener("click", () => {
+  wantForm = b.dataset.form;
+  document.querySelectorAll("[data-form]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+}));
+
+/* ---------- face: glowing eyes and mouth ---------- */
+const faceCanvas = document.createElement("canvas");
+faceCanvas.width = 1024; faceCanvas.height = 640;
+const fx = faceCanvas.getContext("2d");
+const faceTex = new THREE.CanvasTexture(faceCanvas);
+faceTex.colorSpace = THREE.SRGBColorSpace;
+const face = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.1, 1.31),
+  new THREE.MeshBasicMaterial({
+    map: faceTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    toneMapped: false, color: new THREE.Color(2.2, 2.2, 2.2),
+  }),
+);
+face.position.set(0, 0.08, 1.02);
+spirit.add(face);
+
+/* ---------- motes of light ---------- */
+const MOTES = lite ? 260 : 700;
+const seeds = new Float32Array(MOTES * 4);
+for (let i = 0; i < MOTES * 4; i++) seeds[i] = Math.random();
+const moteGeo = new THREE.BufferGeometry();
+moteGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+moteGeo.setAttribute("seed", new THREE.BufferAttribute(seeds, 4));
+const moteUniforms = { uTime: { value: 0 }, uColor: { value: new THREE.Color(0.6, 0.9, 1.0) }, uPixel: { value: 1 } };
+const motes = new THREE.Points(moteGeo, new THREE.ShaderMaterial({
+  uniforms: moteUniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `
+    attribute vec4 seed; uniform float uTime; uniform float uPixel; varying float vAlpha;
+    void main(){
+      float life = fract(seed.x + uTime * (0.03 + seed.y*0.05));
+      float ang = seed.z*6.2831 + uTime*(0.15 + seed.w*0.3) + life*3.0;
+      float rad = mix(0.4, 2.6, seed.y) * (0.6 + life*0.6);
+      vec3 p = vec3(cos(ang)*rad, mix(-3.2, 2.8, life), sin(ang)*rad*0.6 - 0.2);
+      p.x += sin(uTime*0.7 + seed.x*20.0)*0.15;
+      vAlpha = smoothstep(0.0, 0.15, life) * smoothstep(1.0, 0.6, life) * (0.35 + seed.w*0.65);
+      vec4 mv = modelViewMatrix * vec4(p,1.0);
+      gl_PointSize = (4.0 + seed.w*10.0) * uPixel * (6.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor; varying float vAlpha;
+    void main(){
+      float d = length(gl_PointCoord - 0.5);
+      float a = smoothstep(0.5, 0.0, d);
+      gl_FragColor = vec4(uColor * a * a * vAlpha * 1.1, 1.0);
+    }`,
+}));
+scene.add(motes);
+
+/* ---------- bloom ---------- */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(512, 300), 0.8, 0.7, 0.3);
+if (!lite) composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  composer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.position.z = w / h < 1.2 ? 11 : 8.5;
+  if (!lite) bloom.resolution.set(w / 2, h / 2);
+  camera.updateProjectionMatrix();
+  moteUniforms.uPixel.value = renderer.getPixelRatio() * (h / 600);
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+/* ---------- expression ---------- */
+const MOODS = {
+  neutral:   { lid: 0.06, tilt: 0,   squint: 0,    size: 1,    smile: 0.25, lean: 0,  glow: 1.0,
+               rim: [0.55, 0.9, 1.0],  core: [0.15, 0.35, 0.65] },
+  happy:     { lid: 0,    tilt: 3,   squint: 0.46, size: 1.02, smile: 1,    lean: -3, glow: 1.25,
+               rim: [0.6, 1.0, 0.95],  core: [0.2, 0.45, 0.6] },
+  curious:   { lid: 0.02, tilt: 6,   squint: 0,    size: 1.08, smile: 0.2,  lean: 10, glow: 1.1,
+               rim: [0.55, 0.95, 1.0], core: [0.15, 0.4, 0.7], asym: 0.25 },
+  surprised: { lid: 0,    tilt: 6,   squint: 0,    size: 1.24, smile: 0,    lean: 0,  glow: 1.45,
+               rim: [0.85, 0.97, 1.0], core: [0.3, 0.45, 0.75], open: 1 },
+  sad:       { lid: 0.3,  tilt: 16,  squint: 0,    size: 0.94, smile: -0.8, lean: 6,  glow: 0.75,
+               rim: [0.45, 0.6, 1.0],  core: [0.12, 0.2, 0.6] },
+  angry:     { lid: 0.34, tilt: -17, squint: 0.1,  size: 1,    smile: -0.35, lean: 0, glow: 1.2,
+               rim: [1.0, 0.45, 0.55], core: [0.55, 0.1, 0.3] },
+  thinking:  { lid: 0.12, tilt: 4,   squint: 0,    size: 0.96, smile: 0.05, lean: 4,  glow: 0.8,
+               rim: [0.6, 0.75, 1.0],  core: [0.18, 0.25, 0.6] },
+  listening: { lid: 0,    tilt: 5,   squint: 0,    size: 1.12, smile: 0.35, lean: 6,  glow: 1.35,
+               rim: [0.65, 0.97, 1.0], core: [0.2, 0.45, 0.75] },
+  sleepy:    { lid: 0.6,  tilt: -3,  squint: 0.12, size: 1,    smile: 0.1,  lean: 5,  glow: 0.6,
+               rim: [0.65, 0.6, 1.0],  core: [0.2, 0.18, 0.5] },
+};
+const s = { lid: 0.06, tilt: 0, squint: 0, size: 1, smile: 0.25, lean: 0, glow: 1, asym: 0, open: 0,
+            blink: 1, level: 0, lookX: 0, lookY: 0, tx: 0, ty: 0 };
+let mood = "neutral", pointerAt = -1e9, nextLook = 0, nextBlink = 1600, blinkT = -1, speaking = false;
+
+function setMood(name) {
+  mood = name;
+  document.querySelectorAll("[data-mood]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.mood === name));
+}
+document.querySelectorAll("[data-mood]").forEach((b) => b.addEventListener("click", () => setMood(b.dataset.mood)));
+
+stage.addEventListener("pointermove", (e) => {
+  const r = stage.getBoundingClientRect();
+  s.tx = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
+  s.ty = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+  pointerAt = performance.now();
+});
+
+const herbie = {
+  setMood, get mood() { return mood; },
+  setForm(name) { if (FORMS[name]) wantForm = name; },
+  set speaking(v) { speaking = v; }, get speaking() { return speaking; },
+};
+
+/* ---------- drawing the face ---------- */
+function rr(ctx, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawFace(t, rim) {
+  const W = 1024, H = 640;
+  fx.clearRect(0, 0, W, H);
+  const [r, g, b] = rim.map((c) => Math.round(clamp(c, 0, 1) * 255));
+  const ex = s.lookX * 60, ey = s.lookY * 40;
+  const shimmer = 0.9 + 0.1 * Math.sin(t / 170) * Math.sin(t / 63);
+
+  for (const side of [-1, 1]) {
+    const cx = W / 2 + side * 190 + ex, cy = 270 + ey;
+    const w = 150 * s.size, h = 200 * s.size * Math.max(s.blink, 0.04) * (side === -1 ? 1 + s.asym * 0.18 : 1);
+    fx.save();
+    const top = cy - h / 2 + s.lid * h;
+    const slant = s.tilt * 2.2;
+    const aY = top + (side === -1 ? slant : -slant), bY = top + (side === -1 ? -slant : slant);
+    const bottom = cy + h / 2 + 30, arc = s.squint * h * 1.3;
+    fx.beginPath();
+    fx.moveTo(cx - w, aY); fx.lineTo(cx + w, bY); fx.lineTo(cx + w, bottom);
+    fx.quadraticCurveTo(cx, bottom - 30 - arc * 2, cx - w, bottom); fx.closePath();
+    fx.clip();
+    // soft haze first, then a brighter core
+    const haze = fx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.9);
+    haze.addColorStop(0, `rgba(${r},${g},${b},${0.22 * shimmer})`);
+    haze.addColorStop(1, "rgba(0,0,0,0)");
+    fx.fillStyle = haze;
+    fx.fillRect(cx - w * 1.5, cy - h * 1.5, w * 3, h * 3);
+    fx.shadowColor = `rgba(${r},${g},${b},1)`;
+    fx.shadowBlur = 60;
+    const grad = fx.createRadialGradient(cx - w * 0.12, cy - h * 0.18, 4, cx, cy, Math.max(w, h) * 0.62);
+    grad.addColorStop(0, "rgba(255,255,255,0.98)");
+    grad.addColorStop(0.45, `rgba(${Math.min(255, r + 60)},${Math.min(255, g + 30)},${b},0.9)`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0.35)`);
+    fx.fillStyle = grad;
+    rr(fx, cx - w / 2, cy - h / 2, w, h, Math.min(w, h) * 0.5);
+    fx.fill();
+    fx.restore();
+  }
+
+  const mx = W / 2 + ex * 0.8, my = 500 + ey * 0.6;
+  fx.save();
+  fx.shadowColor = `rgba(${r},${g},${b},1)`;
+  fx.shadowBlur = 36;
+  fx.strokeStyle = `rgba(${Math.min(255, r + 80)},${Math.min(255, g + 40)},${b},${0.9 * shimmer})`;
+  fx.lineCap = "round";
+  if (speaking || s.level > 0.03) {
+    fx.fillStyle = `rgba(${Math.min(255, r + 80)},${Math.min(255, g + 40)},${b},0.85)`;
+    const oh = 10 + s.level * 46, ow = 60 + s.level * 18;
+    fx.beginPath(); fx.ellipse(mx, my, ow, oh, 0, 0, 7); fx.fill();
+  } else if (s.open > 0.3) {
+    fx.lineWidth = 12;
+    fx.beginPath(); fx.ellipse(mx, my, 30 * s.open, 40 * s.open, 0, 0, 7); fx.stroke();
+  } else {
+    fx.lineWidth = 13;
+    const c = s.smile * 34;
+    fx.beginPath(); fx.moveTo(mx - 72, my - c * 0.35); fx.quadraticCurveTo(mx, my + c, mx + 72, my - c * 0.35); fx.stroke();
+  }
+  fx.restore();
+  faceTex.needsUpdate = true;
+}
+
+/* ---------- animation ---------- */
+const rim = [0.55, 0.9, 1.0], coreCol = [0.15, 0.35, 0.65];
+let lastT = performance.now();
+// Frame-rate independent easing: k is the per-frame amount at 60 fps.
+let dt = 1;
+const ease = (a, b, k) => a + (b - a) * (1 - Math.pow(1 - k, dt));
+function frame() {
+  const t = performance.now();
+  dt = clamp((t - lastT) / 16.67, 0.2, 6);
+  lastT = t;
+  const secs = t / 1000;
+  const m = MOODS[mood];
+  for (const k of ["lid", "tilt", "squint", "size", "smile", "lean", "glow"]) s[k] = ease(s[k], m[k], 0.08);
+  s.asym = ease(s.asym, m.asym || 0, 0.08);
+  s.open = ease(s.open, m.open || 0, 0.08);
+  if (!FORMS[haveForm].rim) {
+    for (let i = 0; i < 3; i++) { rim[i] = ease(rim[i], m.rim[i], 0.05); coreCol[i] = ease(coreCol[i], m.core[i], 0.05); }
+  }
+
+  if (!reduced && t - pointerAt > 2500 && t > nextLook) {
+    const r = Math.random();
+    s.tx = r < 0.35 ? 0 : Math.random() * 1.6 - 0.8;
+    s.ty = r < 0.35 ? 0 : Math.random() * 0.9 - 0.45;
+    nextLook = t + 1600 + Math.random() * 3000;
+  }
+  if (mood === "thinking") { s.tx = 0.45 + Math.sin(t / 900) * 0.2; s.ty = -0.6; }
+  s.lookX = ease(s.lookX, s.tx, 0.05);
+  s.lookY = ease(s.lookY, s.ty, 0.05);
+
+  if (t > nextBlink && blinkT < 0) blinkT = t;
+  if (blinkT >= 0) {
+    const p = (t - blinkT) / 240;
+    s.blink = p < 0.4 ? 1 - p / 0.4 : p < 1 ? (p - 0.4) / 0.6 : 1;
+    if (p >= 1) { blinkT = -1; s.blink = 1; nextBlink = t + 2400 + Math.random() * 4000; }
+  }
+  const want = speaking ? clamp(0.3 + 0.7 * Math.abs(Math.sin(t / 95) * Math.sin(t / 231 + 1)), 0, 1) : 0;
+  s.level = ease(s.level, want, 0.3);
+
+  const drift = reduced ? 0 : 1;
+  spirit.position.x = ease(spirit.position.x, s.lookX * 0.45, 0.03);
+  spirit.position.y = 0.55 + Math.sin(secs * 0.9) * 0.14 * drift;
+  spirit.rotation.y = ease(spirit.rotation.y, s.lookX * 0.38, 0.05);
+  spirit.rotation.x = ease(spirit.rotation.x, s.lookY * 0.18, 0.05);
+  spirit.rotation.z = THREE.MathUtils.degToRad(-s.lean) + Math.sin(secs * 0.7) * 0.03 * drift;
+
+  // Shapeshift: dissolve the current form into sparks, then build the next one.
+  if (wantForm !== haveForm) {
+    reveal = ease(reveal, -0.08, 0.06);
+    if (reveal < 0.01) { haveForm = wantForm; formUniforms.uForm.value = FORMS[haveForm].id || 1; }
+  } else if (haveForm !== "spirit") {
+    reveal = ease(reveal, 1.08, 0.04);
+  } else {
+    reveal = ease(reveal, -0.08, 0.06);
+  }
+  const solid = clamp(reveal, 0, 1);
+  const f = FORMS[haveForm];
+  if (f.rim) {
+    for (let i = 0; i < 3; i++) {
+      rim[i] = ease(rim[i], f.rim[i], 0.08 * solid + 0.001);
+      coreCol[i] = ease(coreCol[i], f.core[i], 0.08 * solid + 0.001);
+    }
+  }
+  formUniforms.uReveal.value = reveal;
+  formUniforms.uTime.value = secs * drift;
+  form.visible = reveal > 0 && !f.noBody;
+  form.rotation.y = haveForm === "football" ? Math.sin(secs * 0.6) * 0.35 : secs * 0.05;
+  form.rotation.z = haveForm === "football" ? -0.35 + Math.sin(secs * 0.8) * 0.08 : 0;
+  corona.material.opacity = haveForm === "sun" ? solid * (0.85 + 0.15 * Math.sin(secs * 2.1)) : 0;
+  const spiritFade = 1 - solid;
+
+  bodyUniforms.uTime.value = secs * drift + 0.001;
+  bodyUniforms.uLevel.value = s.level;
+  bodyUniforms.uGlow.value = s.glow * spiritFade;
+  bodyUniforms.uRim.value.setRGB(rim[0], rim[1], rim[2]);
+  bodyUniforms.uCore.value.setRGB(coreCol[0], coreCol[1], coreCol[2]);
+  mistUniforms.uTime.value = secs * drift;
+  mistUniforms.uColor.value.setRGB(coreCol[0] * 1.3 + 0.08, coreCol[1] * 1.3 + 0.1, coreCol[2] * 1.2 + 0.15);
+  moteUniforms.uTime.value = secs * drift;
+  const mc = f.motes || rim;
+  const moteDim = f.noBody ? 1 - solid * 0.65 : 1;
+  moteUniforms.uColor.value.setRGB(mc[0] * moteDim, mc[1] * moteDim, mc[2] * moteDim);
+  const breath = 0.85 + 0.15 * Math.sin(secs * 1.7);
+  core.material.opacity = (0.7 + s.level * 0.6) * breath * s.glow * spiritFade;
+  halo.material.opacity = 0.9 * s.glow * (f.noBody ? spiritFade : 0.4 + 0.6 * spiritFade);
+  core.material.color.setRGB(rim[0], rim[1], rim[2]);
+  halo.material.color.setRGB(coreCol[0] * 1.5 + 0.2, coreCol[1] * 1.5 + 0.2, coreCol[2] * 1.3 + 0.2);
+  face.material.color.setScalar(1.4 + s.glow * 0.6 + s.level * 0.8);
+  face.position.z = haveForm === "football" ? 0.95 : 1.1 - spiritFade * 0.08;
+
+  drawFace(t, rim);
+  composer.render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- conversation: the desk server and the Galaxy brain ---------- */
+if (params.get("controls") === "1") document.getElementById("controls").classList.add("show");
+
+const captionEl = document.getElementById("caption");
+const statusEl = document.getElementById("status");
+const ask = document.getElementById("ask");
+const say = document.getElementById("say");
+let captionTimer = 0, busy = false, voice = "screen", mouthUntil = 0;
+
+function caption(text, ms = 9000) {
+  captionEl.textContent = text;
+  captionEl.classList.add("show");
+  clearTimeout(captionTimer);
+  captionTimer = setTimeout(() => captionEl.classList.remove("show"), ms);
+}
+
+// Herbie's brain stores these expressions; map each to a spirit mood.
+const MOOD_FROM_HERBIE = {
+  calm: "neutral", curious: "curious", happy: "happy", playful: "happy", thinking: "thinking",
+  surprised: "surprised", concerned: "sad", sleepy: "sleepy",
+};
+const FORM_WORDS = [
+  [/\b(sun|sunshine)\b/, "sun"], [/\bmoon\b/, "moon"], [/\b(football|foot ball)\b/, "football"],
+  [/\b(just (a|your) face|only (a|your) face|just eyes)\b/, "face"],
+  [/\b(spirit|ghost|yourself|normal|back)\b/, "spirit"],
+];
+function formFrom(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!/\b(turn|become|change|shift|transform|be)\b/.test(lower)) return null;
+  for (const [re, name] of FORM_WORDS) if (re.test(lower)) return name;
+  return null;
+}
+
+function speakOnScreen(text) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; herbie.speaking = false; resolve(); } };
+    herbie.speaking = true;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.98; u.pitch = 1.05;
+      u.onend = finish; u.onerror = finish;
+      speechSynthesis.speak(u);
+    } catch (_) {}
+    setTimeout(finish, 1500 + text.split(/\s+/).length * 360);
+  });
+}
+
+async function converse(text) {
+  const said = String(text || "").trim();
+  if (!said || busy) return;
+  busy = true;
+  const wanted = formFrom(said);
+  if (wanted) herbie.setForm(wanted);
+  caption(said, 4000);
+  herbie.setMood("thinking");
+  try {
+    const res = await fetch("/v1/chat", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: said }),
+    });
+    if (!res.ok) throw new Error("chat_http_" + res.status);
+    let reply = "", mood = "happy", spokenBy = "screen", error = "";
+    for (const line of (await res.text()).split("\n")) {
+      if (!line.trim()) continue;
+      const ev = JSON.parse(line);
+      if (ev.type === "error") error = ev.error || "error";
+      if (ev.type === "done") {
+        reply = ev.text || "";
+        mood = MOOD_FROM_HERBIE[ev.herbie_expression] || "happy";
+        spokenBy = ev.spoken_by || "screen";
+      }
+    }
+    if (error) throw new Error(error);
+    herbie.setMood(mood);
+    const replyForm = formFrom(reply);
+    if (!wanted && replyForm) herbie.setForm(replyForm);
+    caption(reply, 4000 + reply.split(/\s+/).length * 420);
+    if (spokenBy === "galaxy") mouthUntil = performance.now() + 900 + reply.split(/\s+/).length * 380;
+    else await speakOnScreen(reply);
+  } catch (err) {
+    herbie.setMood("sad");
+    const line = String(err.message).includes("unreachable") || String(err.message).includes("no_brain")
+      ? "I can't reach my brain. Is the Galaxy plugged in?" : "Sorry, that one didn't get through.";
+    caption(line);
+    await speakOnScreen(line);
+  } finally {
+    busy = false;
+  }
+}
+
+// Typing anywhere opens the box; Enter sends, Escape closes.
+window.addEventListener("keydown", (e) => {
+  if (e.target === say) {
+    if (e.key === "Enter") { const t = say.value; say.value = ""; ask.classList.remove("open"); say.blur(); converse(t); }
+    if (e.key === "Escape") { ask.classList.remove("open"); say.blur(); }
+    return;
+  }
+  if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+  ask.classList.add("open");
+  say.focus();
+});
+stage.addEventListener("click", () => { ask.classList.toggle("open"); if (ask.classList.contains("open")) say.focus(); });
+
+// Voice conversations happen on the Galaxy; follow its listening/speaking state.
+let lastExpression = "";
+async function follow() {
+  if (busy) return;
+  try {
+    const snap = await fetch("/v1/expression", { cache: "no-store" }).then((r) => r.json());
+    if (!snap || !snap.herbie) return;
+    const galaxyTalking = !!snap.speaking || performance.now() < mouthUntil;
+    if (!(voice === "screen" && herbie.speaking && !snap.speaking)) herbie.speaking = galaxyTalking;
+    if (snap.listening && !galaxyTalking) { herbie.setMood("listening"); lastExpression = ""; return; }
+    if (snap.expression !== lastExpression || herbie.mood === "listening") {
+      lastExpression = snap.expression;
+      herbie.setMood(MOOD_FROM_HERBIE[snap.expression] || "neutral");
+    }
+  } catch (_) {}
+}
+
+(async () => {
+  try {
+    const st = await fetch("/status", { cache: "no-store" }).then((r) => r.json());
+    voice = st.voice || "screen";
+    statusEl.textContent = st.brain ? (st.brain_ready ? "" : "brain offline") : "face only";
+    if (st.herbie) { follow(); setInterval(follow, 1000); }
+  } catch (_) {
+    statusEl.textContent = "face only";
+  }
+})();
+</script>
+</body>
+</html>

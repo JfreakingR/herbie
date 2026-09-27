@@ -130,6 +130,15 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"face-svg", body)
 
+    def test_serves_spirit_and_its_bundled_3d_library(self):
+        status, body = self.get("/face/spirit.html?kiosk=1")
+        self.assertEqual(status, 200)
+        self.assertIn(b"./vendor/three/build/three.module.js", body)
+        status, _ = self.get("/face/vendor/three/build/three.module.js")
+        self.assertEqual(status, 200)
+        status, _ = self.get("/face/vendor/three/examples/jsm/postprocessing/UnrealBloomPass.js")
+        self.assertEqual(status, 200)
+
     def test_face_path_cannot_escape(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self.get("/face/../desk/herbie_desk.py")
