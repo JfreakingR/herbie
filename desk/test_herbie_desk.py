@@ -109,7 +109,9 @@ class ReconnectTests(unittest.TestCase):
 
 class WifiPhoneTests(unittest.TestCase):
     def test_wifi_address_is_connected_and_used_as_the_phone(self):
+        import sys
         from unittest import mock
+        sys.path.insert(0, str(herbie_desk.REPO / "tools"))
         import herbie_presence
         calls = []
         with mock.patch.object(herbie_desk.shutil, "which", return_value="/usr/bin/adb"), \
