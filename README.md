@@ -1,4 +1,4 @@
-# Pal — AI Robot Friend
+# Herbie — AI Robot Friend and assistant
 
 Pal is a mobile companion robot built by preserving and extending as much of the disassembled VAVA pet camera as practical—not merely reusing its shell.
 
