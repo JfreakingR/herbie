@@ -23,9 +23,11 @@ if ($devices -notmatch [regex]::Escape($Phone) + '\s+device') {
 }
 
 Write-Host "Copying Herbie's face to the phone ..."
-& $Adb -s $Phone shell "mkdir -p $Target/pi_bridge" | Out-Null
-& $Adb -s $Phone push (Join-Path $Root 'desk') "$Target/" | Out-Null
-& $Adb -s $Phone push (Join-Path $Root 'pi_bridge\face') "$Target/pi_bridge/" | Out-Null
+# Start clean and name each destination exactly: "adb push dir existing/" can
+# drop the folder's contents straight into existing/ instead of existing/dir.
+& $Adb -s $Phone shell "rm -rf $Target && mkdir -p $Target/pi_bridge" | Out-Null
+& $Adb -s $Phone push (Join-Path $Root 'desk') "$Target/desk" | Out-Null
+& $Adb -s $Phone push (Join-Path $Root 'pi_bridge\face') "$Target/pi_bridge/face" | Out-Null
 
 $check = & $Adb -s $Phone shell "ls $Target/desk/phone/start_face_on_phone.sh $Target/pi_bridge/face/spirit.html 2>&1"
 if (($check -join ' ') -match 'No such file') { throw "The copy did not arrive: $check" }
