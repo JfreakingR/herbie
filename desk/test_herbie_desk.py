@@ -107,6 +107,21 @@ class ReconnectTests(unittest.TestCase):
         self.assertTrue(brain.ready())
 
 
+class WifiPhoneTests(unittest.TestCase):
+    def test_wifi_address_is_connected_and_used_as_the_phone(self):
+        from unittest import mock
+        import herbie_presence
+        calls = []
+        with mock.patch.object(herbie_desk.shutil, "which", return_value="/usr/bin/adb"), \
+             mock.patch.object(herbie_desk.subprocess, "run",
+                               side_effect=lambda cmd, **kw: calls.append(cmd)), \
+             mock.patch.object(herbie_presence, "connect", return_value="tok"), \
+             mock.patch.object(herbie_presence, "PHONE_SERIAL", "R5CR11QCHPY"):
+            self.assertEqual(herbie_desk.connect_over_adb("192.168.1.50:5555"), "tok")
+            self.assertEqual(herbie_presence.PHONE_SERIAL, "192.168.1.50:5555")
+        self.assertEqual(calls, [["/usr/bin/adb", "connect", "192.168.1.50:5555"]])
+
+
 class ServerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

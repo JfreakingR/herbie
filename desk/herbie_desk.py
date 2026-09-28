@@ -20,8 +20,11 @@ tools/herbie_presence.py sets up. Any other machine can pass --brain.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import mimetypes
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -236,11 +239,24 @@ def make_handler(brain: Brain, face_dir: Path = FACE_DIR) -> type[BaseHTTPReques
     return Handler
 
 
-def connect_over_adb() -> str:
-    """Forward the Galaxy brain to the PC exactly as herbie_presence does."""
+def connect_over_adb(phone: str | None = None) -> str:
+    """Forward the Galaxy brain to this machine exactly as herbie_presence does.
+
+    phone is an adb Wi-Fi address such as 192.168.1.50:5555. Without it the
+    phone must be on USB. With it, the phone must be in adb Wi-Fi mode
+    (scrcpy --tcpip, or adb tcpip 5555, from a computer it is plugged into).
+    """
     sys.path.insert(0, str(REPO / "tools"))
     import herbie_presence  # noqa: E402  (Windows-side helper in tools/)
 
+    if phone:
+        adb = shutil.which("adb") or next(
+            (str(p) for p in herbie_presence.ADB_CANDIDATES if p.is_file()), None)
+        if adb is None:
+            raise RuntimeError("adb is not installed")
+        subprocess.run([adb, "connect", phone], capture_output=True, text=True,
+                       timeout=12, check=False)
+        herbie_presence.PHONE_SERIAL = phone
     return herbie_presence.connect()
 
 
@@ -268,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="do not set up the ADB forward; --brain is reachable already")
     parser.add_argument("--voice", choices=VOICES, default="galaxy",
                         help="galaxy: replies play from the phone; screen: the face's own speech")
+    parser.add_argument("--phone", default=None,
+                        help="reach the Galaxy over Wi-Fi at this adb address, e.g. 192.168.1.50:5555")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args(argv)
@@ -276,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     use_adb = args.brain == DEFAULT_BRAIN and not args.no_adb
     if use_adb:
         try:
-            token = connect_over_adb()
+            token = connect_over_adb(args.phone)
         except Exception as exc:  # face still comes up; it just can't think
             print(f"Galaxy brain not connected: {exc}", file=sys.stderr)
             print("The face will show, but Herbie can't answer until this is fixed.",
@@ -286,7 +304,8 @@ def main(argv: list[str] | None = None) -> int:
 
     brain = Brain(args.brain, token, voice=args.voice)
     if use_adb:
-        threading.Thread(target=keep_connected, args=(brain, connect_over_adb),
+        threading.Thread(target=keep_connected,
+                         args=(brain, functools.partial(connect_over_adb, args.phone)),
                          daemon=True).start()
     server = ThreadingHTTPServer((args.host, args.port), make_handler(brain))
     print(f"Herbie's desk face: http://{args.host}:{args.port}/face/?kiosk=1", flush=True)

@@ -14,6 +14,9 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 VOICE="${HERBIE_VOICE:-galaxy}"
+# HERBIE_PHONE=192.168.1.50:5555 reaches the Galaxy over Wi-Fi instead of USB.
+PHONE_ARG=""
+if [ -n "${HERBIE_PHONE:-}" ]; then PHONE_ARG="--phone $HERBIE_PHONE"; fi
 
 say() { printf '\n== %s\n' "$*"; }
 warn() { printf '!! %s\n' "$*" >&2; }
@@ -51,7 +54,7 @@ cat >"$HOME/.config/systemd/user/herbie-desk.service" <<EOF
 Description=Herbie desk face server (brain on the Galaxy)
 
 [Service]
-ExecStart=/usr/bin/python3 $REPO/desk/herbie_desk.py --voice $VOICE
+ExecStart=/usr/bin/python3 $REPO/desk/herbie_desk.py --voice $VOICE $PHONE_ARG
 Restart=always
 RestartSec=5
 
