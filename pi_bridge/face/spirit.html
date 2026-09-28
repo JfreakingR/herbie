@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Herbie</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#03040a">
 <style>
   html, body { margin: 0; height: 100%; background: #03040a; overflow: hidden; cursor: none;
     font-family: "Segoe UI", system-ui, sans-serif; user-select: none; }
@@ -679,7 +681,19 @@ window.addEventListener("keydown", (e) => {
   ask.classList.add("open");
   say.focus();
 });
-stage.addEventListener("click", () => { ask.classList.toggle("open"); if (ask.classList.contains("open")) say.focus(); });
+stage.addEventListener("click", () => {
+  // On a phone the browser bars show until the page asks for full screen,
+  // which it may only do after a tap. The first tap does that; later taps
+  // open the typing box.
+  if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen({ navigationUI: "hide" })
+      .then(() => screen.orientation?.lock?.("landscape").catch(() => {}))
+      .catch(() => {});
+    return;
+  }
+  ask.classList.toggle("open");
+  if (ask.classList.contains("open")) say.focus();
+});
 
 // Voice conversations happen on the Galaxy; follow its listening/speaking state.
 let lastExpression = "", lastForm = "";
