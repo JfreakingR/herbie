@@ -15,11 +15,18 @@ if (-not (Test-Path -LiteralPath (Join-Path $Root 'desk\phone\start_face_on_phon
 }
 if (-not (Test-Path -LiteralPath $Adb)) { throw "adb is missing: $Adb" }
 
-Write-Host "Connecting to the Galaxy at $Phone ..."
-& $Adb connect $Phone | Out-Null
+# Prefer the USB cable when the phone is plugged in; otherwise try Wi-Fi.
 $devices = (& $Adb devices) -join "`n"
-if ($devices -notmatch [regex]::Escape($Phone) + '\s+device') {
-    throw "The Galaxy is not reachable over Wi-Fi at $Phone. Plug it into this PC and run scrcpy with --tcpip once."
+if ($devices -match 'R5CR11QCHPY\s+device') {
+    $Phone = 'R5CR11QCHPY'
+    Write-Host "Using the Galaxy on USB."
+} else {
+    Write-Host "Connecting to the Galaxy over Wi-Fi at $Phone ..."
+    & $Adb connect $Phone | Out-Null
+    $devices = (& $Adb devices) -join "`n"
+    if ($devices -notmatch [regex]::Escape($Phone) + '\s+device') {
+        throw "The Galaxy isn't reachable. Plug it into this PC with a USB cable and run this again."
+    }
 }
 
 Write-Host "Copying Herbie's face to the phone ..."
