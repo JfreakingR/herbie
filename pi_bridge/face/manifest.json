@@ -1,0 +1,9 @@
+{
+  "name": "Herbie",
+  "short_name": "Herbie",
+  "start_url": "spirit.html?kiosk=1",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#03040a",
+  "theme_color": "#03040a"
+}

@@ -11,6 +11,12 @@
       --ink: #141414;
       --hl: #ffffff;
       --dock: rgba(12, 28, 24, 0.72);
+      --skin: #8fcab3;
+      --iris-in: #3f8f9c;
+      --iris-out: #173c47;
+      --blush: #ef7f93;
+      --tongue: #d9606f;
+      --teeth: #f4fbf8;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -64,7 +70,8 @@
       transition: transform 0.28s ease;
     }
     #dock.open, #dock:hover { transform: translateY(0); }
-    body.kiosk #dock { display: none; }
+    /* Kiosk hides the dock until the face is tapped or a key is typed. */
+    body.kiosk #dock:not(.open) { display: none; }
     .grab {
       align-self: center;
       width: 48px;
@@ -125,21 +132,92 @@
       z-index: 4;
     }
     body.kiosk #caption { bottom: 18px; }
+
+    /* Glow look: lit block eyes on a dark screen. ?look=glow */
+    #glow { display: none; }
+    body.look-glow #face { display: none; }
+    body.look-glow #glow { display: inline; }
+    body.look-glow #screen {
+      background:
+        repeating-linear-gradient(to bottom, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse at 50% 45%, #0b1418 0%, #05080a 70%, #020304 100%);
+    }
+    body.look-glow #caption { color: #bff8ff; text-shadow: 0 0 8px rgba(63,240,255,0.6); }
+    body.look-glow #status-dot { color: rgba(191,248,255,0.55); }
   </style>
 </head>
 <body>
   <div id="screen">
     <svg id="face-svg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <radialGradient id="iris" cx="0.42" cy="0.38" r="0.7">
+          <stop offset="0" stop-color="var(--iris-in)" />
+          <stop offset="0.7" stop-color="var(--iris-out)" />
+          <stop offset="1" stop-color="#0b1a1f" />
+        </radialGradient>
+        <clipPath id="clip-l"><ellipse cx="0" cy="0" rx="16.5" ry="16.5" /></clipPath>
+        <clipPath id="clip-r"><ellipse cx="0" cy="0" rx="16.5" ry="16.5" /></clipPath>
+        <clipPath id="clip-mouth"><use href="#mouth-fill" /></clipPath>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" /></filter>
+      </defs>
+      <g id="glow">
+        <defs>
+          <filter id="halo" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="wide" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.1" result="near" />
+            <feMerge><feMergeNode in="wide" /><feMergeNode in="near" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <clipPath id="gclip-l"><path id="gcut-l" /></clipPath>
+          <clipPath id="gclip-r"><path id="gcut-r" /></clipPath>
+        </defs>
+        <g filter="url(#halo)">
+          <g clip-path="url(#gclip-l)"><rect id="geye-l" rx="7" /></g>
+          <g clip-path="url(#gclip-r)"><rect id="geye-r" rx="7" /></g>
+          <path id="gmouth" fill="none" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
+          <ellipse id="gcheek-l" rx="8" ry="3.2" opacity="0" />
+          <ellipse id="gcheek-r" rx="8" ry="3.2" opacity="0" />
+        </g>
+      </g>
       <g id="face">
         <g id="eye-l" class="eye">
           <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
-          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+          <g clip-path="url(#clip-l)">
+            <g id="look-l">
+              <circle cx="0" cy="0" r="10.2" fill="url(#iris)" />
+              <circle cx="0" cy="0" r="10.2" fill="none" stroke="#0b1a1f" stroke-width="1.1" opacity="0.8" />
+              <circle id="pupil-l" cx="0" cy="0" r="5" fill="#050807" />
+              <circle cx="-4.6" cy="-4.6" r="3.6" fill="var(--hl)" />
+              <circle cx="4.2" cy="3.9" r="1.5" fill="var(--hl)" opacity="0.85" />
+            </g>
+            <path d="M -12 9 Q 0 15.5 12 9" fill="none" stroke="var(--hl)" stroke-width="1" opacity="0.18" stroke-linecap="round" />
+            <path id="lid-l" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.8" />
+            <path id="low-l" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.4" />
+          </g>
         </g>
         <g id="eye-r" class="eye">
           <ellipse class="ball" cx="0" cy="0" rx="16.5" ry="16.5" fill="var(--ink)" />
-          <circle class="hl" cx="-5.5" cy="-5.2" r="4.4" fill="var(--hl)" />
+          <g clip-path="url(#clip-r)">
+            <g id="look-r">
+              <circle cx="0" cy="0" r="10.2" fill="url(#iris)" />
+              <circle cx="0" cy="0" r="10.2" fill="none" stroke="#0b1a1f" stroke-width="1.1" opacity="0.8" />
+              <circle id="pupil-r" cx="0" cy="0" r="5" fill="#050807" />
+              <circle cx="-4.6" cy="-4.6" r="3.6" fill="var(--hl)" />
+              <circle cx="4.2" cy="3.9" r="1.5" fill="var(--hl)" opacity="0.85" />
+            </g>
+            <path d="M -12 9 Q 0 15.5 12 9" fill="none" stroke="var(--hl)" stroke-width="1" opacity="0.18" stroke-linecap="round" />
+            <path id="lid-r" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.8" />
+            <path id="low-r" fill="var(--skin)" stroke="var(--ink)" stroke-width="1.4" />
+          </g>
         </g>
+        <path id="brow-l" fill="none" stroke="var(--ink)" stroke-width="4.4" stroke-linecap="round" />
+        <path id="brow-r" fill="none" stroke="var(--ink)" stroke-width="4.4" stroke-linecap="round" />
+        <ellipse id="cheek-l" cx="54" cy="121" rx="11" ry="6" fill="var(--blush)" filter="url(#soft)" opacity="0" />
+        <ellipse id="cheek-r" cx="146" cy="121" rx="11" ry="6" fill="var(--blush)" filter="url(#soft)" opacity="0" />
         <path id="mouth-fill" fill="var(--ink)" opacity="0" />
+        <g id="mouth-inside" clip-path="url(#clip-mouth)" opacity="0">
+          <rect id="teeth" fill="var(--teeth)" rx="1.5" />
+          <ellipse id="tongue" fill="var(--tongue)" />
+        </g>
         <path id="mouth-line" fill="none" stroke="var(--ink)" stroke-width="6.2"
               stroke-linecap="round" stroke-linejoin="round" />
       </g>
@@ -155,6 +233,7 @@
       <button id="btn-speak">Speak</button>
       <button data-idle="random">Idle move</button>
       <button id="btn-demo">Demo</button>
+      <button id="btn-look">Look</button>
     </div>
     <div class="row" id="moods"></div>
     <div class="row">
@@ -176,6 +255,15 @@
   const eyeR = $("eye-r");
   const mouthFill = $("mouth-fill");
   const mouthLine = $("mouth-line");
+  const mouthInside = $("mouth-inside");
+  const teeth = $("teeth");
+  const tongue = $("tongue");
+  const lookL = $("look-l"), lookR = $("look-r");
+  const pupilL = $("pupil-l"), pupilR = $("pupil-r");
+  const lidLeft = $("lid-l"), lidRight = $("lid-r");
+  const lowLeft = $("low-l"), lowRight = $("low-r");
+  const browL = $("brow-l"), browR = $("brow-r");
+  const cheekL = $("cheek-l"), cheekR = $("cheek-r");
   const dock = $("dock");
   const params = new URLSearchParams(location.search);
   if (params.get("kiosk") === "1") document.body.classList.add("kiosk");
@@ -246,7 +334,34 @@
     excited:  { smile: 0.95, eye: 1.16, eyeY: 1.10, lookX: 0, lookY: -3, tilt: -3, lid: 0, skew: 0, width: 0.68 },
   };
 
+  const FEATURES = {
+    neutral: [0, 0, 0, 0.1], happy: [2, 2, 0, 0.3], joy: [4, 3, 0, 0.5], sad: [1, 11, 0, 0],
+    sorry: [2, 12, 0, 0.15], smirk: [1, -4, 4, 0.2], surprised: [9, 3, 0, 0.1], confused: [2, -5, 6, 0],
+    thinking: [3, 4, 4, 0], focused: [-2, -9, 0, 0], sleepy: [-2, 3, 0, 0.1], listen: [3, 2, 0, 0.15],
+    worried: [3, 15, 0, 0], angry: [-3, -17, 0, 0.25], love: [2, 5, 0, 0.85], embarrassed: [1, 9, 0, 0.95],
+    excited: [6, 1, 0, 0.45],
+  };
+
+  // Eye colour per mood in the glow look.
+  const GLOW_COLORS = {
+    angry: [255, 77, 94], love: [255, 122, 200], embarrassed: [255, 150, 190], sad: [96, 150, 255],
+    sorry: [110, 160, 255], worried: [140, 200, 255], sleepy: [40, 150, 165], excited: [120, 255, 230],
+    joy: [110, 255, 235],
+  };
+  const GLOW_DEFAULT = [63, 240, 255];
+  let savedLook = null;
+  try { savedLook = localStorage.getItem("herbie-look"); } catch (_) {}
+  let glowLook = (params.get("look") || savedLook) === "glow";
+  document.body.classList.toggle("look-glow", glowLook);
+  function toggleLook() {
+    glowLook = !glowLook;
+    document.body.classList.toggle("look-glow", glowLook);
+    try { localStorage.setItem("herbie-look", glowLook ? "glow" : "classic"); } catch (_) {}
+  }
+
   const state = {
+    glow: [...GLOW_DEFAULT],
+    brow: 2, browTilt: 2, browAsym: 0, blush: 0.3,
     mode: "idle",
     emotion: "happy",
     lookX: 0, lookY: 0,
@@ -298,6 +413,11 @@
     tweenState("eyeY", e.eyeY, ms);
     tweenState("tilt", e.tilt, ms);
     tweenState("lid", e.lid, ms);
+    const [brow, browTilt, browAsym, blush] = FEATURES[name] || FEATURES.neutral;
+    tweenState("brow", brow, ms);
+    tweenState("browTilt", browTilt, ms);
+    tweenState("browAsym", browAsym, ms);
+    tweenState("blush", blush, ms * 1.6);
     if (!state.holdLook && !state.talking) {
       tweenState("lookX", e.lookX, ms);
       tweenState("lookY", e.lookY, ms);
@@ -642,6 +762,7 @@
         line: "",
         fill: `M ${cx - rx} ${y} a ${rx} ${ry2} 0 1 0 ${rx * 2} 0 a ${rx} ${ry2} 0 1 0 ${-rx * 2} 0`,
         fillOp: 1,
+        top: y - ry2, bottom: y + ry2, halfWidth: rx,
       };
     }
 
@@ -652,10 +773,62 @@
     const fill = `M ${left} ${ly}
       Q ${cx} ${cUp} ${right} ${ry}
       Q ${cx} ${cDn} ${left} ${ly} Z`;
-    return { line: "", fill, fillOp: 1 };
+    return { line: "", fill, fillOp: 1, top: Math.min(cUp, ly, ry), bottom: cDn, halfWidth: w / 2 };
   }
 
-  function render() {
+  function renderGlow(t, smile, open, width, round, talking) {
+    const target = GLOW_COLORS[emotionName] || GLOW_DEFAULT;
+    for (let i = 0; i < 3; i++) state.glow[i] = lerp(state.glow[i], target[i], 0.08);
+    const flicker = 0.93 + Math.sin(t / 130) * 0.02 + Math.sin(t / 47) * 0.01;
+    const [r, g, b] = state.glow.map((c) => Math.round(c * (state.mode === "sleep" ? 0.55 : 1)));
+    const color = `rgb(${r},${g},${b})`;
+
+    const hw = 19 * state.eye, lidSlant = state.browTilt * 0.32;
+    const cover = clamp(state.lid * 0.5 + (state.browTilt < 0 ? -state.browTilt * 0.01 : 0), 0, 0.75);
+    const squint = talking ? 0 : clamp((smile - 0.78) * 2.2, 0, 0.45);
+    for (const [side, cx, blinkKey, sign] of [["l", 68, "blinkL", 1], ["r", 132, "blinkR", -1]]) {
+      const hh = 15 * state.eyeY * state[blinkKey];
+      const x = cx + state.lookX * 1.1, y = 92 + state.lookY * 0.9;
+      const rect = $("geye-" + side);
+      rect.setAttribute("x", (x - hw).toFixed(2));
+      rect.setAttribute("y", (y - hh).toFixed(2));
+      rect.setAttribute("width", (hw * 2).toFixed(2));
+      rect.setAttribute("height", Math.max(hh * 2, 1.2).toFixed(2));
+      rect.setAttribute("rx", Math.min(7, hh).toFixed(2));
+      rect.setAttribute("fill", color);
+      rect.setAttribute("opacity", flicker.toFixed(3));
+      // Lid line slants with the brows (inner end is toward the nose); a big
+      // smile cuts the bottom into an upturned arc.
+      const top = y - hh + cover * hh * 2;
+      const inner = top + lidSlant * -1, outer = top + lidSlant;
+      const [lx, rx2] = [x - hw - 2, x + hw + 2];
+      const leftY = sign > 0 ? outer : inner, rightY = sign > 0 ? inner : outer;
+      const bottom = y + hh + 2, arc = squint * hh * 2.6;
+      $("gcut-" + side).setAttribute("d",
+        `M ${lx} ${leftY} L ${rx2} ${rightY} L ${rx2} ${bottom} Q ${x} ${bottom - arc * 2} ${lx} ${bottom} Z`);
+    }
+
+    // Mouth: a lit line that opens into an outline while he talks.
+    const drawn = mouthPath({ open, width: width * 0.8, round, smile, skew: state.mouth.skew });
+    const mouth = $("gmouth");
+    mouth.setAttribute("d", drawn.fillOp ? drawn.fill : drawn.line);
+    mouth.setAttribute("stroke", color);
+    mouth.setAttribute("transform", "translate(0 6)");
+    mouth.setAttribute("opacity", (0.9 * flicker).toFixed(3));
+
+    for (const [side, cx] of [["l", 60], ["r", 140]]) {
+      const cheek = $("gcheek-" + side);
+      cheek.setAttribute("cx", cx + state.lookX * 1.1);
+      cheek.setAttribute("cy", 116 + state.lookY * 0.9);
+      cheek.setAttribute("fill", "rgb(255,110,170)");
+      cheek.setAttribute("opacity", (state.blush > 0.4 ? (state.blush - 0.4) * 1.4 : 0).toFixed(3));
+    }
+    const breath = 1 + Math.sin(state.breath) * 0.012;
+    $("glow").setAttribute("transform",
+      `translate(100 100) rotate(${state.tilt * 0.6}) scale(${breath}) translate(-100 -100)`);
+  }
+
+  function render(t = now()) {
     const e = EMOTIONS[emotionName] || EMOTIONS.neutral;
     const talking = state.talking || state.audioLevel > 0.03;
     const m = state.mouth;
@@ -664,11 +837,24 @@
     const width = talking ? lerp(m.width, visemeSmooth.width, 0.9) : m.width;
     const round = talking ? visemeSmooth.round : m.round;
 
+    if (glowLook) return renderGlow(t, smile, open, width, round, talking);
     const drawn = mouthPath({ open, width, round, smile, skew: m.skew });
     mouthLine.setAttribute("d", drawn.line || "M 0 0");
     mouthLine.setAttribute("opacity", drawn.fillOp ? 0 : 1);
     mouthFill.setAttribute("d", drawn.fill || "M 0 0");
     mouthFill.setAttribute("opacity", drawn.fillOp);
+    const depth = drawn.fillOp ? drawn.bottom - drawn.top : 0;
+    mouthInside.setAttribute("opacity", depth > 5 ? clamp((depth - 5) / 6, 0, 1) : 0);
+    if (depth > 5) {
+      teeth.setAttribute("x", 100 - drawn.halfWidth * 0.62);
+      teeth.setAttribute("y", drawn.top - 2);
+      teeth.setAttribute("width", drawn.halfWidth * 1.24);
+      teeth.setAttribute("height", clamp(depth * 0.2, 2, 4.2) + 2);
+      tongue.setAttribute("cx", 100);
+      tongue.setAttribute("cy", drawn.bottom + 1);
+      tongue.setAttribute("rx", drawn.halfWidth * 0.6);
+      tongue.setAttribute("ry", clamp(depth * 0.4, 3, 9));
+    }
 
     const ox = 70, oy = 88, gap = 60;
     const lookX = state.lookX, lookY = state.lookY;
@@ -676,6 +862,37 @@
     const syL = state.eyeY * state.blinkL;
     const syR = state.eyeY * state.blinkR;
     const lidSquash = 1 - state.lid * 0.12;
+
+    // Pupils lead the head a little and widen when he is interested.
+    const px = clamp(lookX * 0.35, -4.5, 4.5), py = clamp(lookY * 0.3, -4.5, 4.5);
+    const dilate = state.mode === "listen" || emotionName === "love" || emotionName === "excited" ? 6.2
+      : emotionName === "angry" || emotionName === "focused" ? 4 : 5;
+    for (const [look, pupil] of [[lookL, pupilL], [lookR, pupilR]]) {
+      look.setAttribute("transform", `translate(${px} ${py})`);
+      pupil.setAttribute("r", lerp(+pupil.getAttribute("r"), dilate, 0.12).toFixed(2));
+    }
+    // Upper lids follow mood and brow angle; lower lids push up in a big smile.
+    const cover = clamp(state.lid * 0.42 + (state.browTilt < 0 ? -state.browTilt * 0.008 : 0), 0, 0.7);
+    const squint = talking ? 0 : clamp((smile - 0.78) * 1.6, 0, 0.3);
+    const lidY = -19 + cover * 35;
+    const slant = state.browTilt * 0.28;
+    lidLeft.setAttribute("d", `M -19 -20 L 19 -20 L 19 ${lidY - slant} Q 0 ${lidY + 2} -19 ${lidY + slant} Z`);
+    lidRight.setAttribute("d", `M -19 -20 L 19 -20 L 19 ${lidY + slant} Q 0 ${lidY + 2} -19 ${lidY - slant} Z`);
+    const lowY = 19 - squint * 36;
+    const lowPath = `M -19 20 L 19 20 L 19 ${lowY + 3} Q 0 ${lowY - 3} -19 ${lowY + 3} Z`;
+    lowLeft.setAttribute("d", lowPath);
+    lowRight.setAttribute("d", lowPath);
+
+    const browLift = state.brow + (state.eyeY - 1) * 10;
+    const browAt = (x, raise, tilt) =>
+      `translate(${x + lookX * 0.5} ${oy - 27 - raise + lookY * 0.4}) rotate(${tilt})`;
+    const browShape = "M -11 2 Q 0 -3.2 11 2";
+    browL.setAttribute("d", browShape);
+    browR.setAttribute("d", browShape);
+    browL.setAttribute("transform", browAt(ox, browLift + state.browAsym, -state.browTilt));
+    browR.setAttribute("transform", browAt(ox + gap, browLift, state.browTilt));
+    cheekL.setAttribute("opacity", (state.blush * 0.6).toFixed(3));
+    cheekR.setAttribute("opacity", (state.blush * 0.6).toFixed(3));
 
     eyeL.setAttribute("transform",
       `translate(${ox + lookX}, ${oy + lookY}) scale(${sx * lidSquash}, ${syL}) rotate(${state.lid * -12})`);
@@ -702,7 +919,7 @@
     visemeSmooth.smile = lerp(visemeSmooth.smile, viseme.smile == null ? visemeSmooth.smile : viseme.smile, 0.22);
     state.jaw = lerp(state.jaw, visemeSmooth.open, 0.28);
     scheduleIdle(t);
-    render();
+    render(t);
     requestAnimationFrame(frame);
   }
 
@@ -845,6 +1062,7 @@
   });
   $("btn-speak").addEventListener("click", () => { if (!grokLive) api.speak($("say").value); });
   $("btn-demo").addEventListener("click", () => api.demo());
+  $("btn-look").addEventListener("click", toggleLook);
   $("say").addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || grokLive) return;
     api.speak($("say").value);
@@ -852,6 +1070,16 @@
 
   svg.addEventListener("click", () => dock.classList.toggle("open"));
   dock.querySelector(".grab").addEventListener("click", () => dock.classList.add("open"));
+  window.addEventListener("keydown", (e) => {
+    if (e.target === $("say")) {
+      if (e.key === "Escape") { dock.classList.remove("open"); $("say").blur(); }
+      return;
+    }
+    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+    dock.classList.add("open");
+    $("say").value = "";
+    $("say").focus();
+  });
 
   applyEmotion(params.get("emotion") || "happy", 1);
   setMode("idle");
@@ -881,14 +1109,17 @@
 
   const FACE_FROM_HERBIE = {
     calm: "neutral", curious: "listen", happy: "happy", playful: "smirk",
-    thinking: "thinking", surprised: "surprised", concerned: "sorry", sleepy: "sleepy",
+    thinking: "thinking", surprised: "surprised", concerned: "sorry", sleepy: "sleepy", angry: "angry",
   };
 
   let grokBusy = false;
+  let brainName = "my cortex";
+  let brainHelp = "Check the xAI key.";
   let sentenceQ = Promise.resolve();
-  function queueSpeak(text, emotion) {
+  function queueSpeak(text, emotion, voiced = true) {
     sentenceQ = sentenceQ.then(async () => {
       if (emotion) api.setEmotion(emotion);
+      if (!voiced) return;
       await api.speak(text);
     }).catch(() => {});
     return sentenceQ;
@@ -914,6 +1145,7 @@
       let buf = "";
       let pending = "";
       let emotion = "happy";
+      let spokenBy = "screen";
       api.startTalking();
       while (true) {
         const { value, done } = await reader.read();
@@ -927,21 +1159,23 @@
           try { ev = JSON.parse(line); } catch { continue; }
           if (ev.type === "error") {
             api.setEmotion("sorry");
-            await queueSpeak("I couldn't reach my cortex. Check the xAI key.", "sorry");
+            await queueSpeak(`I couldn't reach ${brainName}. ${brainHelp}`, "sorry");
             throw new Error(ev.error || "grok_error");
           }
           if (ev.type === "token") pending += ev.text || "";
           if (ev.type === "done") {
             emotion = ev.emotion || FACE_FROM_HERBIE[ev.herbie_expression] || "happy";
             pending = ev.text || pending;
+            spokenBy = ev.spoken_by || "screen";
           }
         }
       }
       const cleaned = pending.replace(/^EMOTION:\s*\w+\s*/i, "").trim() || pending.trim();
       api.stopTalking();
       showCaption(cleaned);
-      await queueSpeak(cleaned, emotion);
-      api.idle();
+      // When the Galaxy says it aloud, its speaking flag moves the mouth.
+      await queueSpeak(cleaned, emotion, spokenBy !== "galaxy");
+      if (spokenBy !== "galaxy") api.idle();
     } catch (err) {
       api.stopTalking();
       api.idle();
@@ -958,9 +1192,14 @@
     try {
       const s = await fetch("/status", { cache: "no-store" }).then((r) => r.json());
       if (!s || !s.companion) return false;
-      const grok = !!s.grok;
+      const grok = !!(s.grok || s.brain);
       const herbie = !!s.herbie;
-      statusEl.textContent = (grok ? "Grok" : "face only") + (herbie ? " · Herbie" : "");
+      if (s.brain && !s.grok) {
+        brainName = "my brain";
+        brainHelp = "Is the Galaxy plugged in?";
+      }
+      statusEl.textContent = s.brain && !s.grok ? "Herbie" + (s.brain_ready ? "" : " · brain offline")
+        : (grok ? "Grok" : "face only") + (herbie ? " · Herbie" : "");
       $("say").value = grok ? "What's on your mind?" : $("say").value;
       $("btn-say").textContent = grok ? "Ask me" : "Talk";
       window.removeEventListener("pointerdown", first);
@@ -969,6 +1208,7 @@
         const ask = () => {
           const t = $("say").value;
           $("say").value = "";
+          if (document.body.classList.contains("kiosk")) { dock.classList.remove("open"); $("say").blur(); }
           askGrok(t);
         };
         $("btn-say").onclick = ask;
@@ -976,7 +1216,9 @@
         $("say").onkeydown = (e) => { if (e.key === "Enter") ask(); };
         api.setEmotion("happy");
         api.idle();
-        showCaption("I'm in here. Ask me anything.");
+        showCaption(s.brain && !s.grok && !s.brain_ready
+          ? "My brain isn't answering. Is the Galaxy plugged in?"
+          : "I'm in here. Ask me anything.");
       } else if (herbie) {
         api.setEmotion("happy");
         api.idle();

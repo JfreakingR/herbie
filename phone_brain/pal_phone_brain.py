@@ -20,6 +20,7 @@ import herbie_autonomic
 import herbie_chat
 import herbie_cloud
 import herbie_eyes
+import herbie_form
 import herbie_recall
 import herbie_memory
 import herbie_neck
@@ -65,6 +66,9 @@ API_TOKEN = load_api_token()
 MAX_BODY_BYTES = 16_384
 STARTED_AT = time.monotonic()
 STATE_LOCK = threading.Lock()
+# What shape the desk screen shows him as; display only.
+FORM = herbie_form.FormState()
+FACE = herbie_form.FaceWatch()
 CONVERSATION_LOCK = threading.Lock()
 # Saved to disk by herbie_recall so a restart does not wipe what was just said.
 RECENT_DIALOGUE: deque[dict[str, str]] = deque(herbie_recall.load_dialogue(), maxlen=12)
@@ -222,7 +226,12 @@ class PalHandler(BaseHTTPRequestHandler):
             self.send_json(200, coordination_snapshot())
             return
         if parsed.path == "/v1/expression":
-            self.send_json(200, herbie_memory.expression_snapshot())
+            # The desk face polls this every second; that is how he knows
+            # he has a face.
+            FACE.seen()
+            expression = herbie_memory.expression_snapshot()
+            expression["form"] = FORM.current
+            self.send_json(200, expression)
             return
         if parsed.path == "/v1/privacy":
             self.send_json(200, herbie_memory.privacy_snapshot())
@@ -399,8 +408,25 @@ class PalHandler(BaseHTTPRequestHandler):
             eyes_ok = camera_ok and herbie_cloud.load_config() is not None
             if neck_line:
                 context_lines.append(neck_line)
+            # "Turn into the moon", spoken or typed, changes his shape on the
+            # desk screen; the reply is told so he can play along.
+            message_text = str(request.get("message", ""))
+            new_form = herbie_form.requested(message_text)
+            if new_form:
+                FORM.set(new_form)
+                context_lines.append(herbie_form.context_line(new_form))
+            # "Make an angry face" changes his expression straight away.
+            asked_face = herbie_form.requested_expression(message_text)
+            if asked_face and FACE.connected():
+                try:
+                    herbie_memory.set_expression({"expression": asked_face})
+                    context_lines.append(herbie_form.expression_line(asked_face))
+                except ValueError:
+                    pass
             context = "\n".join(context_lines)
             skills = []
+            if FACE.connected():
+                skills.append(herbie_form.FACE_SKILL)
             if neck_line:
                 skills.append(herbie_neck.NECK_SKILL)
             if eyes_ok:
@@ -427,6 +453,15 @@ class PalHandler(BaseHTTPRequestHandler):
             response["text"], look = herbie_neck.extract_look(response["text"])
             response["text"], see = herbie_eyes.extract_see(response["text"])
             question = request["message"].strip()
+            # A reply may change his face with a [face NAME] tag; the tag is
+            # never spoken. Only acted on while a face is connected.
+            response["text"], face_tag = herbie_form.extract_face(response["text"])
+            if face_tag and FACE.connected():
+                try:
+                    herbie_memory.set_expression({"expression": face_tag})
+                    response["face"] = face_tag
+                except ValueError:
+                    pass
             if eyes_ok and not see and herbie_eyes.asks_to_see(question):
                 # Asked plainly to look: look, and drop a reply that guessed
                 # without a photo.

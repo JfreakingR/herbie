@@ -2,6 +2,10 @@
 
 Pal is a mobile companion robot built by preserving and extending as much of the disassembled VAVA pet camera as practical—not merely reusing its shell.
 
+> **2026-09-27: Herbie is a stationary desk bot for now** — his face on a 7" LCD,
+> his brain on the Galaxy, the VAVA body parked. Start with [DESK_MODE.md](DESK_MODE.md)
+> and `Start Herbie Desk.cmd`.
+
 ## Current computing roles
 
 - **Windows computer:** primary local language model through Ollama (`qwen3.5:9b`) whenever the computer is reachable over the private network.
@@ -29,3 +33,4 @@ Software entry points:
 - [Phone brain](phone_brain/README.md)
 - [Computer brain](computer_brain/README.md)
 - [Android model bridge](android_brain/README.md)
+- [Desk face server](desk/herbie_desk.py) — see [DESK_MODE.md](DESK_MODE.md)

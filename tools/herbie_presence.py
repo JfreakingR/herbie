@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -33,6 +34,8 @@ def request(path: str, token: str = "", body: dict | None = None) -> dict:
 
 def connect() -> str:
     adb = next((p for p in ADB_CANDIDATES if p.is_file()), None)
+    if adb is None and shutil.which("adb"):
+        adb = Path(shutil.which("adb"))  # Linux (the Pi 400): apt install adb
     if adb is None:
         raise RuntimeError("ADB is missing from the known Herbie tool locations")
     if not TOKEN_FILE.is_file():
