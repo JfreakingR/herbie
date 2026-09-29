@@ -73,6 +73,16 @@ desk/pi400/install.sh` switches his voice to the screen's audio.
 Checks: `adb devices` should list `R5CR11QCHPY  device`;
 `journalctl --user -u herbie-desk -f` shows the server's log.
 
+## Galaxy drives the 7" screen itself (most promising)
+
+On 09-27 the S21 drove the 7" over a USB-C→HDMI adapter and served the spirit
+itself, with no PC or Pi: see `HERBIE_HANDOFF_2026-09-28_DESK_FACE.md`. Use
+**screen mirroring**, not DeX (the 7" is too small for DeX). One-time setup:
+`Send Herbie Face To Phone.cmd` on the PC, then in Termux
+`sh /sdcard/Download/herbie-desk/desk/phone/install_face_autostart.sh`; the face
+then starts at every boot on port 8767. A USB-C hub (HDMI + USB-A + PD) would
+add the 7" touchscreen and charging.
+
 ## His face: the spirit
 
 Herbie's face is `pi_bridge/face/spirit.html`, a glowing, wispy spirit drawn
