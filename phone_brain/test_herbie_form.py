@@ -36,5 +36,29 @@ class FormStateTests(unittest.TestCase):
         self.assertIn("spirit", form.context_line("spirit"))
 
 
+class FaceTests(unittest.TestCase):
+    def test_asking_for_a_face(self):
+        self.assertEqual(form.requested_expression("Herbie, make an angry face"), "angry")
+        self.assertEqual(form.requested_expression("can you look happy?"), "happy")
+        self.assertEqual(form.requested_expression("show me a sad face"), "concerned")
+        self.assertIsNone(form.requested_expression("I'm happy today"))
+        self.assertIsNone(form.requested_expression("look behind you"))
+
+    def test_face_tags_are_removed_and_read(self):
+        self.assertEqual(form.extract_face("Grr! [face angry] Happy now?"), ("Grr! Happy now?", "angry"))
+        self.assertEqual(form.extract_face("[FACE Surprised] Oh!"), ("Oh!", "surprised"))
+        self.assertEqual(form.extract_face("Hello there"), ("Hello there", None))
+        self.assertEqual(form.extract_face("Hmm [face banana]")[1], None)
+
+    def test_face_counts_as_connected_only_while_it_checks_in(self):
+        now = [100.0]
+        watch = form.FaceWatch(clock=lambda: now[0])
+        self.assertFalse(watch.connected())
+        watch.seen()
+        self.assertTrue(watch.connected())
+        now[0] += form.FACE_TIMEOUT_SECONDS + 1
+        self.assertFalse(watch.connected())
+
+
 if __name__ == "__main__":
     unittest.main()

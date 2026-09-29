@@ -58,6 +58,7 @@ EXPRESSIONS = {
     "surprised",
     "concerned",
     "sleepy",
+    "angry",
 }
 
 
