@@ -41,6 +41,9 @@ class HerbieEars(
     @Volatile private var running = false
     @Volatile var mode = "none"
         private set
+    /** Waiting on the brain's reply, so the face can look like it is thinking. */
+    @Volatile var thinking = false
+        private set
 
     fun start() = main.post {
         if (running) return@post
@@ -135,9 +138,14 @@ class HerbieEars(
     }
 
     private fun converse(message: String) {
-        val reply = runCatching { askBrain(message) }
-            .onFailure { Log.e(TAG, "Brain unavailable", it) }
-            .getOrNull()
+        thinking = true
+        val reply = try {
+            runCatching { askBrain(message) }
+                .onFailure { Log.e(TAG, "Brain unavailable", it) }
+                .getOrNull()
+        } finally {
+            thinking = false
+        }
         say(reply ?: "Sorry, my brain didn't answer.")
     }
 

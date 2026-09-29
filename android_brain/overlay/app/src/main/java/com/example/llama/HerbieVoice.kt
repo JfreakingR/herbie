@@ -56,6 +56,9 @@ class HerbieVoice(context: Context) {
 
     val isReady: Boolean get() = ready
 
+    /** True while audio is actually playing, so the face's mouth moves with it. */
+    val isSpeaking: Boolean get() = player != null || streamTrack != null
+
     private fun configure(): Boolean {
         val language = tts.setLanguage(Locale.US)
         if (language == TextToSpeech.LANG_MISSING_DATA ||

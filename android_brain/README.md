@@ -32,6 +32,22 @@ they are large and re-downloadable.
   camera foreground type alongside the microphone, so it works in the
   background and after a restart the same way. Grant the permission once:
   `adb shell pm grant com.prismml.herbiebrain android.permission.CAMERA`.
+- Face (7-inch HDMI screen): plug the screen into the Galaxy through a USB-C
+  hub with HDMI and power passthrough (the hub keeps the phone charged). The
+  service puts Herbie's existing BMO face, `pi_bridge/face/index.html`, full
+  screen on it and takes it down when the cable comes out (`HerbieFace.kt`).
+  The build copies that page into the app, so there is one face to edit. The
+  face follows the brain's `/v1/expression` for mood; its mouth moves while
+  his voice is playing, it looks thoughtful while he waits on the brain, and it
+  listens while he is awake. It needs **Appear on top** (already granted for
+  hearing after a restart) and the brain token (`--es brain_token`). One-time
+  phone setting, through `Show Galaxy Screen.cmd` since the phone's own screen
+  is broken: Settings > Connected devices > Samsung DeX > turn off
+  **Auto start when HDMI is connected**, so the phone mirrors to HDMI instead
+  of starting DeX; the face then replaces the mirror. To keep the screen from
+  sleeping while plugged in: `adb shell settings put global
+  stay_on_while_plugged_in 7`. Check it took with
+  `adb logcat -s HerbieFace` (`Face on HDMI Screen (1024x600)` or similar).
 - Motion: no motor API, `motor_authority=false`, `safe_motion_state=STOP`
 
 The Qwen3 1.7B file is from the official `Qwen/Qwen3-1.7B-GGUF` repository at

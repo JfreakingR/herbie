@@ -29,6 +29,7 @@ class HerbieModelService : Service() {
     private var voice: HerbieVoice? = null
     private var ears: HerbieEars? = null
     private var eyes: HerbieEyes? = null
+    private var face: HerbieFace? = null
     private var foregroundTypes = 0
     @Volatile private var loading = false
 
@@ -39,6 +40,7 @@ class HerbieModelService : Service() {
         val canHear = startInForeground()
         voice = HerbieVoice(this)
         if (canHear) startEars()
+        face = HerbieFace(this, { voice }, { ears }, ::brainToken).also { it.start() }
         startModelIfNeeded()
     }
 
@@ -95,11 +97,13 @@ class HerbieModelService : Service() {
     private fun granted(permission: String) =
         checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
+    private fun brainToken(): String? = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
+        .getString(BRAIN_TOKEN_KEY, null)
+        ?.trim()
+        ?.takeIf { it.length >= 16 }
+
     private fun startEars() {
-        val brainToken = getSharedPreferences(PREFERENCES, MODE_PRIVATE)
-            .getString(BRAIN_TOKEN_KEY, null)
-            ?.trim()
-            ?.takeIf { it.length >= 16 }
+        val brainToken = brainToken()
         if (brainToken == null) {
             Log.w(TAG, "Brain token missing; ears stay off")
             return
@@ -187,6 +191,8 @@ class HerbieModelService : Service() {
     }
 
     override fun onDestroy() {
+        face?.stop()
+        face = null
         bridge?.stop()
         bridge = null
         ears?.stop()

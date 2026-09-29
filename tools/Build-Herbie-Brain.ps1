@@ -61,6 +61,11 @@ if (-not (Test-Path -LiteralPath $env:ANDROID_HOME)) { throw "No Android SDK at 
 
 Write-Host "Copying Herbie's overlay into $Project ..." -ForegroundColor Cyan
 Copy-Item -Path (Join-Path $Overlay '*') -Destination $Project -Recurse -Force
+# Herbie's face on the Galaxy's HDMI screen is the same page Melba serves;
+# one copy lives in pi_bridge\face and goes into the app's assets here.
+$FaceAssets = Join-Path $Project 'app\src\main\assets\face'
+New-Item -ItemType Directory -Force -Path $FaceAssets | Out-Null
+Copy-Item -LiteralPath (Join-Path $Root 'pi_bridge\face\index.html') -Destination $FaceAssets -Force
 
 Write-Host 'Building (several minutes the first time) ...' -ForegroundColor Cyan
 Push-Location $Project
